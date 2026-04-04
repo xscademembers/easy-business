@@ -11,39 +11,56 @@ interface CameraProps {
 export function Camera({ onCapture, loading }: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
   const [captured, setCaptured] = useState<string>('');
+
+  const stopStream = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setStream(null);
+  }, []);
 
   const startCamera = useCallback(async () => {
     try {
       setError('');
       setCaptured('');
+      stopStream();
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: 640, height: 480 },
       });
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      streamRef.current = mediaStream;
       setStream(mediaStream);
     } catch {
       setError(
         'Unable to access camera. Please allow camera permissions and try again.'
       );
     }
-  }, []);
+  }, [stopStream]);
 
   useEffect(() => {
-    startCamera();
+    void startCamera();
     return () => {
-      stream?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      setStream(null);
     };
-  }, []);
+  }, [startCamera]);
 
-  const stopCamera = () => {
-    stream?.getTracks().forEach((t) => t.stop());
-    setStream(null);
-  };
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!stream || captured || error) {
+      if (video) video.srcObject = null;
+      return;
+    }
+    if (!video) return;
+    video.srcObject = stream;
+    void video.play().catch(() => {});
+    return () => {
+      video.srcObject = null;
+    };
+  }, [stream, captured, error]);
 
   const captureImage = () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -56,19 +73,18 @@ export function Camera({ onCapture, loading }: CameraProps) {
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     setCaptured(dataUrl);
-    stopCamera();
+    stopStream();
     onCapture(dataUrl);
   };
 
   const retake = () => {
-    setCaptured('');
-    startCamera();
+    void startCamera();
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       <div
-        className="relative rounded-2xl overflow-hidden aspect-[4/3]"
+        className="relative min-h-[240px] overflow-hidden rounded-2xl aspect-[4/3]"
         style={{
           backgroundColor: 'var(--bg-tertiary)',
           border: '2px solid var(--border)',
@@ -87,7 +103,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
             >
               {error}
             </p>
-            <button onClick={startCamera} className="btn-primary text-sm !px-4 !py-2">
+            <button onClick={() => void startCamera()} className="btn-primary text-sm !px-4 !py-2">
               Try Again
             </button>
           </div>
@@ -95,7 +111,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
           <img
             src={captured}
             alt="Captured"
-            className="w-full h-full object-cover"
+            className="block h-full w-full object-cover"
           />
         ) : (
           <video
@@ -103,7 +119,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
+            className="block h-full w-full object-cover bg-black"
           />
         )}
 
@@ -132,7 +148,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
         ) : (
           <button
             onClick={captureImage}
-            disabled={!!error || loading}
+            disabled={!!error || loading || !stream}
             className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
           >
             <CameraIcon size={16} />

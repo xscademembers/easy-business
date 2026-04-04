@@ -123,7 +123,7 @@ export default function HomePage() {
               </div>
 
               {showCamera && (
-                <div className="card">
+                <div className="card min-w-0 w-full">
                   <Camera onCapture={handleCapture} loading={searching} />
                   {message && (
                     <p

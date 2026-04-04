@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Camera as CameraIcon,
@@ -73,12 +73,22 @@ export default function AddProductPage() {
   const [fingerprinting, setFingerprinting] = useState(false);
   const [fingerprintHint, setFingerprintHint] = useState('');
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!cameraActive || !stream || !video) return;
+    video.srcObject = stream;
+    void video.play().catch(() => {});
+    return () => {
+      video.srcObject = null;
+    };
+  }, [stream, cameraActive]);
+
   const startCamera = async () => {
     try {
+      setError('');
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: 640, height: 480 },
       });
-      if (videoRef.current) videoRef.current.srcObject = mediaStream;
       setStream(mediaStream);
       setCameraActive(true);
     } catch {
@@ -216,14 +226,14 @@ export default function AddProductPage() {
             }}
           >
             {image ? (
-              <img src={image} alt="Preview" className="w-full h-full object-cover" />
+              <img src={image} alt="Preview" className="block h-full w-full object-cover" />
             ) : cameraActive ? (
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover"
+                className="block h-full w-full object-cover bg-black"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">

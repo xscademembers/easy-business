@@ -121,6 +121,16 @@ export default function EditProductPage() {
   }, [id]);
 
   useEffect(() => {
+    const video = videoRef.current;
+    if (!cameraActive || !stream || !video) return;
+    video.srcObject = stream;
+    void video.play().catch(() => {});
+    return () => {
+      video.srcObject = null;
+    };
+  }, [stream, cameraActive]);
+
+  useEffect(() => {
     if (loading || !image || featureCodeVersion === PRODUCT_FEATURE_PIPELINE_VERSION) return;
     if (captureInProgress.current) return;
 
@@ -165,10 +175,10 @@ export default function EditProductPage() {
 
   const startCamera = async () => {
     try {
+      setError('');
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'environment', width: 640, height: 480 },
       });
-      if (videoRef.current) videoRef.current.srcObject = mediaStream;
       setStream(mediaStream);
       setCameraActive(true);
     } catch {
@@ -325,9 +335,15 @@ export default function EditProductPage() {
             style={{ backgroundColor: 'var(--bg-tertiary)', border: '2px solid var(--border)' }}
           >
             {image ? (
-              <img src={image} alt="Preview" className="w-full h-full object-cover" />
+              <img src={image} alt="Preview" className="block h-full w-full object-cover" />
             ) : cameraActive ? (
-              <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="block h-full w-full object-cover bg-black"
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <CameraIcon size={48} style={{ color: 'var(--text-muted)' }} />
