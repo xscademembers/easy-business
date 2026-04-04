@@ -42,7 +42,7 @@ export async function POST(request: Request) {
           product: p,
           similarity: compareHashes(featureCode, p.featureCode),
         }))
-        .filter((m) => m.similarity >= 95)
+        .filter((m) => m.similarity >= 80)
         .sort((a, b) => b.similarity - a.similarity);
 
       if (matches.length > 0) {

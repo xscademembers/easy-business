@@ -21,11 +21,11 @@ export default function AdminLoginPage() {
 
     const success = await login(password);
     if (success) {
-      router.push('/admin');
+      window.location.href = '/admin';
     } else {
       setError('Invalid password. Please try again.');
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

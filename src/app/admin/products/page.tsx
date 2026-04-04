@@ -8,7 +8,8 @@ import {
   Package,
   Loader2,
   Trash2,
-  ExternalLink,
+  Pencil,
+  Eye,
 } from 'lucide-react';
 
 export default function AdminProductsPage() {
@@ -209,18 +210,18 @@ export default function AdminProductsPage() {
                           href={`/admin/products/${product._id}`}
                           className="p-2 rounded-lg transition-colors"
                           style={{ color: 'var(--accent)' }}
-                          title="Edit"
+                          title="Edit product"
                         >
-                          <ExternalLink size={16} />
+                          <Pencil size={16} />
                         </Link>
                         <Link
                           href={`/product/${product._id}`}
                           target="_blank"
                           className="p-2 rounded-lg transition-colors"
-                          style={{ color: 'var(--text-muted)' }}
+                          style={{ color: 'var(--success)' }}
                           title="View public page"
                         >
-                          <ExternalLink size={16} />
+                          <Eye size={16} />
                         </Link>
                         <button
                           onClick={() => handleDelete(product._id)}

@@ -158,6 +158,7 @@ export async function prepareProductImageForMatching(
   const progress = options?.progress;
 
   try {
+    if (progress) progress('background-removal', 0, 1);
     const { removeBackground } = await import('@imgly/background-removal');
     const blob = await removeBackground(rawDataUrl, {
       model: 'isnet_quint8',
@@ -167,9 +168,11 @@ export async function prepareProductImageForMatching(
         : undefined,
       output: { format: 'image/png' },
     });
+    if (progress) progress('trimming', 1, 1);
     const cutoutUrl = await blobToDataUrl(blob);
     return trimTransparentDataUrl(cutoutUrl);
-  } catch {
+  } catch (err) {
+    console.warn('[productImagePipeline] Background removal failed, using center crop:', err);
     return centerCropDataUrl(rawDataUrl, 0.68);
   }
 }

@@ -1,29 +1,38 @@
+const HASH_SIZE = 16;
+
+/**
+ * Generates a perceptual hash (pHash) from an image data URL.
+ * Uses a 16×16 grid (256 bits) for better discrimination than the old 8×8 (64 bits).
+ * Fills transparent areas with white so background-removed PNGs hash only the product.
+ */
 export function generatePerceptualHash(imageDataUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = 8;
-        canvas.height = 8;
+        canvas.width = HASH_SIZE;
+        canvas.height = HASH_SIZE;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           resolve(fallbackHash(imageDataUrl));
           return;
         }
 
-        ctx.drawImage(img, 0, 0, 8, 8);
-        const pixels = ctx.getImageData(0, 0, 8, 8).data;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, HASH_SIZE, HASH_SIZE);
+        ctx.drawImage(img, 0, 0, HASH_SIZE, HASH_SIZE);
+
+        const pixels = ctx.getImageData(0, 0, HASH_SIZE, HASH_SIZE).data;
         const grayPixels: number[] = [];
 
         for (let i = 0; i < pixels.length; i += 4) {
           grayPixels.push(
-            pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114
+            pixels[i]! * 0.299 + pixels[i + 1]! * 0.587 + pixels[i + 2]! * 0.114
           );
         }
 
-        const avg =
-          grayPixels.reduce((a, b) => a + b, 0) / grayPixels.length;
+        const avg = grayPixels.reduce((a, b) => a + b, 0) / grayPixels.length;
         let binaryStr = '';
         for (const pixel of grayPixels) {
           binaryStr += pixel >= avg ? '1' : '0';
@@ -64,8 +73,8 @@ export function compareHashes(hash1: string, hash2: string): number {
 
   let distance = 0;
   for (let i = 0; i < minLen; i++) {
-    const b1 = parseInt(hash1[i], 16) || 0;
-    const b2 = parseInt(hash2[i], 16) || 0;
+    const b1 = parseInt(hash1[i]!, 16) || 0;
+    const b2 = parseInt(hash2[i]!, 16) || 0;
     let xor = b1 ^ b2;
     while (xor) {
       distance += xor & 1;
