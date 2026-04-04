@@ -64,17 +64,15 @@ export async function POST(request: Request) {
 
       /*
        * Matching strategy:
-       *   1. OCR is primary — if ≥60% of the product's stored words are found
-       *      (fuzzy) in the scanned text, it's a match. 60% handles OCR noise
-       *      while being strict enough to reject unrelated products.
-       *   2. Visual hash is backup — only used when OCR found no text at all.
+       *   1. Text-from-photo match is primary — ≥55% word overlap (fuzzy).
+       *   2. Visual similarity is backup when little or no text is read.
        *
        * The containment algorithm already ignores background words, so changed
-       * backgrounds don't lower the score. Rotation/zoom are handled by the
-       * image preprocessing (grayscale + contrast) before OCR.
+       * backgrounds don't lower the score. Rotation/zoom are partially handled by
+       * image preprocessing (grayscale + contrast) and the visual hash backup.
        */
-      const OCR_THRESHOLD = 60;
-      const HASH_THRESHOLD = 80;
+      const OCR_THRESHOLD = 55;
+      const HASH_THRESHOLD = 75;
 
       const matches = scored
         .filter(

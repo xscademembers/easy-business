@@ -2,6 +2,7 @@ import { generatePerceptualHash } from './imageUtils';
 import { PRODUCT_FEATURE_PIPELINE_VERSION } from './productFeatureConstants';
 import { extractTextFromImage, normalizeOcrText } from './ocrUtils';
 
+/** Kept for API compatibility; prefer `ProcessProductImageOptions.onProgress` for UI. */
 export type ProductImageProgress = (
   key: string,
   current: number,
@@ -149,64 +150,99 @@ export function centerCropDataUrl(
 
 async function prepareProductImageForMatching(
   rawDataUrl: string,
-  options?: { progress?: ProductImageProgress }
+  onPrepareFraction?: (fraction: number) => void
 ): Promise<string> {
-  const progress = options?.progress;
-
+  const bump = (current: number, total: number) => {
+    const f = total > 0 ? Math.min(1, current / total) : 0;
+    onPrepareFraction?.(f);
+  };
   try {
-    if (progress) progress('background-removal', 0, 1);
     const { removeBackground } = await import('@imgly/background-removal');
     const blob = await removeBackground(rawDataUrl, {
       model: 'isnet_quint8',
-      progress: progress
-        ? (key: string, current: number, total: number) =>
-            progress(key, current, total)
-        : undefined,
       output: { format: 'image/png' },
+      progress: onPrepareFraction
+        ? (_key: string, current: number, total: number) => bump(current, total)
+        : undefined,
     });
-    if (progress) progress('trimming', 1, 1);
+    onPrepareFraction?.(1);
     const cutoutUrl = await blobToDataUrl(blob);
     return trimTransparentDataUrl(cutoutUrl);
   } catch (err) {
     console.warn('[productImagePipeline] Background removal failed, using center crop:', err);
+    onPrepareFraction?.(1);
     return centerCropDataUrl(rawDataUrl, 0.68);
   }
 }
 
+export interface ProcessProductImageOptions {
+  /** 0–100, monotonic; combines background prep, visual pass, and text-reading pass running in parallel. */
+  onProgress?: (percent: number) => void;
+}
+
 /**
- * Full pipeline: runs background-removal + perceptual hash AND OCR in parallel.
- * Returns both the featureCode (visual hash) and ocrText (normalised OCR output).
+ * Full pipeline: background removal + visual hash, and text read from the photo, in parallel.
+ * Returns featureCode (visual similarity) and normalised text for catalog matching.
  */
 export async function processProductImage(
   rawDataUrl: string,
-  options?: { progress?: ProductImageProgress }
+  options?: ProcessProductImageOptions
 ): Promise<ProductImageResult> {
-  const progress = options?.progress;
+  const onProgress = options?.onProgress;
+  let lastPct = 0;
+  const report = (pct: number) => {
+    const v = Math.max(lastPct, Math.min(100, Math.round(pct)));
+    lastPct = v;
+    onProgress?.(v);
+  };
+
+  let prepFrac = 0;
+  let hashDone = false;
+  let ocrFrac = 0;
+
+  const emit = () => {
+    const prepChain = Math.min(100, prepFrac * 90 + (hashDone ? 10 : 0));
+    const ocrChain = Math.min(100, ocrFrac * 100);
+    report(0.5 * prepChain + 0.5 * ocrChain);
+  };
+
+  report(2);
 
   const [featureCode, ocr] = await Promise.all([
     (async () => {
-      const prepared = await prepareProductImageForMatching(rawDataUrl, options);
-      return generatePerceptualHash(prepared);
+      const prepared = await prepareProductImageForMatching(rawDataUrl, (f) => {
+        prepFrac = f;
+        emit();
+      });
+      const h = await generatePerceptualHash(prepared);
+      hashDone = true;
+      emit();
+      return h;
     })(),
     (async () => {
-      if (progress) progress('Running OCR…', 0, 1);
-      const result = await extractTextFromImage(rawDataUrl, (status, pct) => {
-        if (progress) progress(`OCR: ${status}`, pct, 1);
+      const result = await extractTextFromImage(rawDataUrl, (f) => {
+        ocrFrac = f;
+        emit();
       });
-      if (progress) progress('OCR complete', 1, 1);
+      ocrFrac = 1;
+      emit();
       return result.normalized;
     })(),
   ]);
 
+  report(100);
   return { featureCode, ocrText: ocr };
 }
 
 /** @deprecated Use processProductImage instead. Kept for backward compatibility. */
 export async function generateProductFeatureCode(
   rawDataUrl: string,
-  options?: { progress?: ProductImageProgress }
+  options?: { progress?: ProductImageProgress; onProgress?: (percent: number) => void }
 ): Promise<string> {
-  const result = await processProductImage(rawDataUrl, options);
+  void options?.progress;
+  const result = await processProductImage(rawDataUrl, {
+    onProgress: options?.onProgress,
+  });
   return result.featureCode;
 }
 

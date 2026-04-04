@@ -14,6 +14,8 @@ import {
   processProductImage,
   PRODUCT_FEATURE_PIPELINE_VERSION,
 } from '@/lib/productImagePipeline';
+import { SCAN_WORKING } from '@/lib/scanUiCopy';
+import { ScanProgressBar } from '@/components/ScanProgressBar';
 
 const CATEGORIES = ['clothing', 'electronics', 'food', 'utensils', 'other'];
 
@@ -73,6 +75,7 @@ export default function AddProductPage() {
   const [error, setError] = useState('');
   const [fingerprinting, setFingerprinting] = useState(false);
   const [fingerprintHint, setFingerprintHint] = useState('');
+  const [scanProgress, setScanProgress] = useState(0);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -118,13 +121,12 @@ export default function AddProductPage() {
     setOcrText('');
     stopCamera();
     setFingerprinting(true);
-    setFingerprintHint('Scanning image (OCR + fingerprint)…');
+    setScanProgress(0);
+    setFingerprintHint(SCAN_WORKING);
     setError('');
     try {
       const result = await processProductImage(dataUrl, {
-        progress: (key, current, total) => {
-          setFingerprintHint(`${key} (${current} / ${total})`);
-        },
+        onProgress: setScanProgress,
       });
       setFeatureCode(result.featureCode);
       setOcrText(result.ocrText);
@@ -135,6 +137,7 @@ export default function AddProductPage() {
       setFingerprintHint('');
     } finally {
       setFingerprinting(false);
+      setScanProgress(0);
     }
   };
 
@@ -221,7 +224,7 @@ export default function AddProductPage() {
             Product Image
           </h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Background is removed in the browser before saving a fingerprint, so customer scans match even when the backdrop differs.
+            The background is cleaned up in your browser so scans still match when the backdrop is different.
           </p>
           <div
             className="rounded-xl overflow-hidden aspect-[16/9] relative"
@@ -257,8 +260,11 @@ export default function AddProductPage() {
                   aria-hidden
                 />
                 <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  {fingerprintHint || 'Preparing fingerprint…'}
+                  {fingerprintHint || 'Please wait…'}
                 </span>
+                <div className="w-full max-w-xs mx-auto px-2">
+                  <ScanProgressBar value={scanProgress} label="Photo processing progress" />
+                </div>
               </div>
             )}
           </div>
@@ -296,7 +302,7 @@ export default function AddProductPage() {
               style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
             >
               <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                OCR Text Detected:
+                Text read from the photo (helps match scans):
               </span>{' '}
               {ocrText}
             </div>
@@ -430,26 +436,28 @@ export default function AddProductPage() {
           {variants.map((v, i) => (
             <div
               key={i}
-              className="grid grid-cols-5 gap-3 items-end rounded-xl p-4"
+              className="rounded-xl p-4 space-y-3 sm:space-y-0 sm:grid sm:grid-cols-5 sm:gap-3 sm:items-end"
               style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
             >
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Size</label>
-                <input value={v.size} onChange={(e) => updateVariant(i, 'size', e.target.value)} className="input-field text-sm !py-2" />
+              <div className="grid grid-cols-2 gap-3 sm:contents">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Size</label>
+                  <input value={v.size} onChange={(e) => updateVariant(i, 'size', e.target.value)} className="input-field text-sm !py-2" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Color</label>
+                  <input value={v.color} onChange={(e) => updateVariant(i, 'color', e.target.value)} className="input-field text-sm !py-2" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Material</label>
+                  <input value={v.material} onChange={(e) => updateVariant(i, 'material', e.target.value)} className="input-field text-sm !py-2" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Price</label>
+                  <input type="number" step="0.01" value={v.price} onChange={(e) => updateVariant(i, 'price', e.target.value)} className="input-field text-sm !py-2" />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Color</label>
-                <input value={v.color} onChange={(e) => updateVariant(i, 'color', e.target.value)} className="input-field text-sm !py-2" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Material</label>
-                <input value={v.material} onChange={(e) => updateVariant(i, 'material', e.target.value)} className="input-field text-sm !py-2" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>Price</label>
-                <input type="number" step="0.01" value={v.price} onChange={(e) => updateVariant(i, 'price', e.target.value)} className="input-field text-sm !py-2" />
-              </div>
-              <button type="button" onClick={() => removeVariant(i)} className="p-2 rounded-lg self-end" style={{ color: 'var(--danger)' }}>
+              <button type="button" onClick={() => removeVariant(i)} className="p-2 rounded-lg sm:self-end" style={{ color: 'var(--danger)' }}>
                 <X size={18} />
               </button>
             </div>

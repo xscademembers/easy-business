@@ -1,44 +1,35 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { Camera } from '@/components/Camera';
-import { ProductCard } from '@/components/ProductCard';
 import {
   processProductImage,
   PRODUCT_FEATURE_PIPELINE_VERSION,
 } from '@/lib/productImagePipeline';
-import { Camera as CameraIcon, Search, Sparkles, Package, ArrowRight } from 'lucide-react';
+import { SCAN_CHECKING_STORE, SCAN_WORKING } from '@/lib/scanUiCopy';
+import { ScanProgressBar } from '@/components/ScanProgressBar';
+import { Camera as CameraIcon, Search, Sparkles } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
   const [searching, setSearching] = useState(false);
   const [searchId, setSearchId] = useState('');
-  const [products, setProducts] = useState<any[]>([]);
   const [showCamera, setShowCamera] = useState(false);
   const [message, setMessage] = useState('');
-
-  useEffect(() => {
-    fetch('/api/products?limit=8')
-      .then((r) => r.json())
-      .then((data) => setProducts(data.products || []))
-      .catch(() => {});
-  }, []);
+  const [scanProgress, setScanProgress] = useState(0);
 
   const handleCapture = async (imageDataUrl: string) => {
     setSearching(true);
-    setMessage(
-      'Scanning image (first visit downloads on-device models; may take a minute)…'
-    );
+    setScanProgress(0);
+    setMessage(SCAN_WORKING);
     try {
       const result = await processProductImage(imageDataUrl, {
-        progress: (key, current, total) => {
-          setMessage(`${key} (${current} / ${total})`);
-        },
+        onProgress: setScanProgress,
       });
-      setMessage('Searching catalog…');
+      setMessage(SCAN_CHECKING_STORE);
       const res = await fetch('/api/products/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -59,6 +50,7 @@ export default function HomePage() {
       setMessage('Search failed. Please try again.');
     } finally {
       setSearching(false);
+      setScanProgress(0);
     }
   };
 
@@ -127,15 +119,21 @@ export default function HomePage() {
                 <div className="card min-w-0 w-full">
                   <Camera onCapture={handleCapture} loading={searching} />
                   {message && (
-                    <p
-                      className="mt-4 text-sm text-center px-4 py-3 rounded-xl"
+                    <div
+                      className="mt-4 px-4 py-3 rounded-xl"
                       style={{
                         backgroundColor: 'var(--accent-light)',
                         color: 'var(--accent)',
                       }}
                     >
-                      {message}
-                    </p>
+                      <p className="text-sm text-center">{message}</p>
+                      {searching && (
+                        <ScanProgressBar
+                          value={scanProgress}
+                          label="Scan progress"
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               )}
@@ -186,7 +184,7 @@ export default function HomePage() {
                 Enter the unique product ID to find exactly what you need
               </p>
             </div>
-            <form onSubmit={handleIdSearch} className="flex gap-3">
+            <form onSubmit={handleIdSearch} className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
                 value={searchId}
@@ -194,7 +192,7 @@ export default function HomePage() {
                 placeholder="e.g. PRD-00001"
                 className="input-field flex-1"
               />
-              <button type="submit" className="btn-primary flex items-center gap-2 shrink-0">
+              <button type="submit" className="btn-primary flex items-center justify-center gap-2 shrink-0">
                 <Search size={18} />
                 Search
               </button>
@@ -202,64 +200,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {products.length > 0 && (
-          <section
-            className="py-16"
-            style={{ backgroundColor: 'var(--bg-secondary)' }}
-          >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2
-                    className="text-2xl md:text-3xl font-bold mb-2"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    Products
-                  </h2>
-                  <p style={{ color: 'var(--text-secondary)' }}>
-                    Browse our catalog
-                  </p>
-                </div>
-                <button
-                  onClick={() => router.push('/search?q=')}
-                  className="btn-secondary flex items-center gap-2 text-sm !px-4 !py-2"
-                >
-                  View All
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {products.map((product: any) => (
-                  <ProductCard key={product._id} product={product} />
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {products.length === 0 && (
-          <section
-            className="py-24"
-            style={{ backgroundColor: 'var(--bg-secondary)' }}
-          >
-            <div className="max-w-md mx-auto text-center px-4">
-              <Package
-                size={64}
-                className="mx-auto mb-4"
-                style={{ color: 'var(--text-muted)' }}
-              />
-              <h2
-                className="text-xl font-bold mb-2"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                No Products Yet
-              </h2>
-              <p style={{ color: 'var(--text-secondary)' }}>
-                Products will appear here once added through the admin panel.
-              </p>
-            </div>
-          </section>
-        )}
       </main>
       <Footer />
     </>

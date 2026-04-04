@@ -1,7 +1,5 @@
 import Tesseract from 'tesseract.js';
 
-export type OcrProgress = (status: string, progress: number) => void;
-
 /**
  * Normalise OCR output: lowercase, collapse whitespace, strip non-alphanumeric (keep spaces).
  */
@@ -60,26 +58,31 @@ function preprocessForOcr(imageDataUrl: string): Promise<string> {
 }
 
 /**
- * Run Tesseract OCR on a data-URL image (in the browser via web worker).
- * Preprocesses the image first for better accuracy with rotation/zoom/background.
+ * Read visible text from a photo (in the browser). Used together with visual matching
+ * for product lookup—not full object detection.
  */
 export async function extractTextFromImage(
   imageDataUrl: string,
-  onProgress?: OcrProgress
+  onProgress?: (fraction: number) => void
 ): Promise<{ raw: string; normalized: string }> {
   try {
-    if (onProgress) onProgress('Preprocessing image…', 0);
     const processed = await preprocessForOcr(imageDataUrl);
-
-    if (onProgress) onProgress('Initializing OCR…', 0.1);
+    onProgress?.(0.05);
 
     const result = await Tesseract.recognize(processed, 'eng', {
-      logger: (m: Tesseract.LoggerMessage) => {
-        if (onProgress && m.status) {
-          onProgress(m.status, typeof m.progress === 'number' ? m.progress : 0);
+      logger: (m: { status?: string; progress?: number }) => {
+        if (!onProgress) return;
+        const s = (m.status || '').toLowerCase();
+        if (s.includes('recognizing')) {
+          const p = typeof m.progress === 'number' ? m.progress : 0;
+          onProgress(0.12 + p * 0.88);
+        } else if (s.includes('loading') || s.includes('initializ')) {
+          onProgress(0.08);
         }
       },
     });
+
+    onProgress?.(1);
 
     const raw = (result.data.text ?? '').trim();
     return { raw, normalized: normalizeOcrText(raw) };

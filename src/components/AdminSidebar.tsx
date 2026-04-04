@@ -11,10 +11,11 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -24,11 +25,21 @@ const navItems = [
   { href: '/admin/contacts', label: 'Messages', icon: MessageSquare },
 ];
 
-export function AdminSidebar() {
+interface AdminSidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export function AdminSidebar({ mobileOpen, onMobileClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { logout } = useAuth();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    onMobileClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href;
@@ -40,15 +51,8 @@ export function AdminSidebar() {
     router.push('/admin/login');
   };
 
-  return (
-    <aside
-      className="h-screen sticky top-0 border-r flex flex-col transition-all duration-200"
-      style={{
-        width: collapsed ? '72px' : '256px',
-        backgroundColor: 'var(--bg-secondary)',
-        borderColor: 'var(--border)',
-      }}
-    >
+  const sidebarContent = (
+    <>
       <div
         className="flex items-center justify-between p-4 border-b"
         style={{ borderColor: 'var(--border)' }}
@@ -70,12 +74,23 @@ export function AdminSidebar() {
           </div>
         )}
         <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-1.5 rounded-lg transition-colors"
+          onClick={() => {
+            if (onMobileClose) {
+              onMobileClose();
+            } else {
+              setCollapsed(!collapsed);
+            }
+          }}
+          className="p-1.5 rounded-lg transition-colors lg:block"
           style={{ color: 'var(--text-muted)' }}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          <span className="hidden lg:block">
+            {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </span>
+          <span className="lg:hidden">
+            <X size={20} />
+          </span>
         </button>
       </div>
 
@@ -111,6 +126,40 @@ export function AdminSidebar() {
           {!collapsed && 'Logout'}
         </button>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside
+        className="hidden lg:flex h-screen sticky top-0 border-r flex-col transition-all duration-200"
+        style={{
+          width: collapsed ? '72px' : '256px',
+          backgroundColor: 'var(--bg-secondary)',
+          borderColor: 'var(--border)',
+        }}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 transition-opacity duration-200"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            onClick={onMobileClose}
+            aria-hidden
+          />
+          <aside
+            className="relative flex flex-col w-72 max-w-[80vw] h-full"
+            style={{ backgroundColor: 'var(--bg-secondary)' }}
+          >
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

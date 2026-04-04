@@ -152,7 +152,7 @@ export default function ProductPage() {
               {product.description || 'No description available.'}
             </p>
 
-            <div className="flex items-baseline gap-3">
+            <div className="flex flex-wrap items-baseline gap-3">
               <span
                 className="text-3xl font-bold"
                 style={{ color: 'var(--accent)' }}
@@ -219,12 +219,12 @@ export default function ProductPage() {
                 {Object.entries(product.categoryFields).map(([key, value]) => {
                   if (value == null || value === '') return null;
                   return (
-                    <div key={key} className="flex justify-between text-sm">
-                      <span style={{ color: 'var(--text-secondary)' }}>
+                    <div key={key} className="flex justify-between gap-4 text-sm">
+                      <span className="shrink-0" style={{ color: 'var(--text-secondary)' }}>
                         {fields[key] || key}
                       </span>
                       <span
-                        className="font-medium"
+                        className="font-medium text-right min-w-0 break-words"
                         style={{ color: 'var(--text-primary)' }}
                       >
                         {String(value)}
@@ -236,9 +236,9 @@ export default function ProductPage() {
             )}
 
             {product.stock > 0 && (
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                 <div
-                  className="flex items-center rounded-xl border"
+                  className="flex items-center justify-center rounded-xl border shrink-0"
                   style={{ borderColor: 'var(--border)' }}
                 >
                   <button

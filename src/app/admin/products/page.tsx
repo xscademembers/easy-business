@@ -108,7 +108,84 @@ export default function AdminProductsPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile card layout */}
+          <div className="sm:hidden space-y-3">
+            {filtered.map((product) => (
+              <div
+                key={product._id}
+                className="rounded-xl p-3"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="w-12 h-12 rounded-lg overflow-hidden shrink-0"
+                    style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                  >
+                    {product.image ? (
+                      <img src={product.image} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Package size={16} style={{ color: 'var(--text-muted)' }} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>
+                      {product.name}
+                    </p>
+                    <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>
+                      {product.productId}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span
+                        className="text-xs font-medium px-2 py-0.5 rounded-md capitalize"
+                        style={{ backgroundColor: 'var(--accent-light)', color: 'var(--accent)' }}
+                      >
+                        {product.category}
+                      </span>
+                      <span
+                        className="text-xs font-medium"
+                        style={{ color: product.stock > 0 ? 'var(--success)' : 'var(--danger)' }}
+                      >
+                        Stock: {product.stock}
+                      </span>
+                      <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        ${product.price.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 mt-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <Link
+                    href={`/admin/products/${product._id}`}
+                    className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
+                    style={{ color: 'var(--accent)' }}
+                  >
+                    <Pencil size={14} /> Edit
+                  </Link>
+                  <Link
+                    href={`/product/${product._id}`}
+                    target="_blank"
+                    className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
+                    style={{ color: 'var(--success)' }}
+                  >
+                    <Eye size={14} /> View
+                  </Link>
+                  <button
+                    onClick={() => handleDelete(product._id)}
+                    className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
+                    style={{ color: 'var(--danger)' }}
+                  >
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden sm:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr
@@ -238,6 +315,7 @@ export default function AdminProductsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
     </div>

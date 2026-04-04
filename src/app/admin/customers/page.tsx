@@ -72,7 +72,7 @@ export default function CustomersPage() {
                       {order.customer?.name || 'Unknown'}
                     </p>
                     <p
-                      className="text-sm"
+                      className="text-sm break-all"
                       style={{ color: 'var(--text-muted)' }}
                     >
                       {order.customer?.email} | {order.customer?.phone}
