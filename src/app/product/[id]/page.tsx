@@ -216,22 +216,22 @@ export default function ProductPage() {
                 >
                   Specifications
                 </h3>
-                {Object.entries(product.categoryFields).map(
-                  ([key, value]) =>
-                    value && (
-                      <div key={key} className="flex justify-between text-sm">
-                        <span style={{ color: 'var(--text-secondary)' }}>
-                          {fields[key] || key}
-                        </span>
-                        <span
-                          className="font-medium"
-                          style={{ color: 'var(--text-primary)' }}
-                        >
-                          {String(value)}
-                        </span>
-                      </div>
-                    )
-                )}
+                {Object.entries(product.categoryFields).map(([key, value]) => {
+                  if (value == null || value === '') return null;
+                  return (
+                    <div key={key} className="flex justify-between text-sm">
+                      <span style={{ color: 'var(--text-secondary)' }}>
+                        {fields[key] || key}
+                      </span>
+                      <span
+                        className="font-medium"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {String(value)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

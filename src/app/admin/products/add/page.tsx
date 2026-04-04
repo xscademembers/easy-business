@@ -10,7 +10,10 @@ import {
   X,
   RotateCcw,
 } from 'lucide-react';
-import { generatePerceptualHash } from '@/lib/imageUtils';
+import {
+  generateProductFeatureCode,
+  PRODUCT_FEATURE_PIPELINE_VERSION,
+} from '@/lib/productImagePipeline';
 
 const CATEGORIES = ['clothing', 'electronics', 'food', 'utensils', 'other'];
 
@@ -67,6 +70,8 @@ export default function AddProductPage() {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [fingerprinting, setFingerprinting] = useState(false);
+  const [fingerprintHint, setFingerprintHint] = useState('');
 
   const startCamera = async () => {
     try {
@@ -98,14 +103,32 @@ export default function AddProductPage() {
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     setImage(dataUrl);
-    const hash = await generatePerceptualHash(dataUrl);
-    setFeatureCode(hash);
+    setFeatureCode('');
     stopCamera();
+    setFingerprinting(true);
+    setFingerprintHint('Preparing scan fingerprint…');
+    setError('');
+    try {
+      const hash = await generateProductFeatureCode(dataUrl, {
+        progress: (key, current, total) => {
+          setFingerprintHint(`Loading ${key} (${current} / ${total})…`);
+        },
+      });
+      setFeatureCode(hash);
+      setFingerprintHint('');
+    } catch {
+      setError('Could not build product fingerprint. Try again or retake the photo.');
+      setImage('');
+      setFingerprintHint('');
+    } finally {
+      setFingerprinting(false);
+    }
   };
 
   const retakeImage = () => {
     setImage('');
     setFeatureCode('');
+    setFingerprintHint('');
     startCamera();
   };
 
@@ -134,6 +157,7 @@ export default function AddProductPage() {
         category: form.category,
         image,
         featureCode,
+        featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
         categoryFields,
         variants: variants
           .filter((v) => v.size || v.color || v.material)
@@ -181,6 +205,9 @@ export default function AddProductPage() {
           >
             Product Image
           </h2>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Background is removed in the browser before saving a fingerprint, so customer scans match even when the backdrop differs.
+          </p>
           <div
             className="rounded-xl overflow-hidden aspect-[16/9] relative"
             style={{
@@ -203,16 +230,42 @@ export default function AddProductPage() {
                 <CameraIcon size={48} style={{ color: 'var(--text-muted)' }} />
               </div>
             )}
+            {fingerprinting && (
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center"
+                style={{ backgroundColor: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)' }}
+              >
+                <Loader2
+                  className="animate-spin motion-reduce:animate-none"
+                  size={32}
+                  style={{ color: 'var(--accent)' }}
+                  aria-hidden
+                />
+                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {fingerprintHint || 'Preparing fingerprint…'}
+                </span>
+              </div>
+            )}
           </div>
           <canvas ref={canvasRef} className="hidden" />
 
           <div className="flex gap-3">
             {image ? (
-              <button type="button" onClick={retakeImage} className="btn-secondary flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={retakeImage}
+                disabled={fingerprinting}
+                className="btn-secondary flex items-center gap-2 text-sm disabled:opacity-50"
+              >
                 <RotateCcw size={16} /> Retake
               </button>
             ) : cameraActive ? (
-              <button type="button" onClick={captureImage} className="btn-primary flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={captureImage}
+                disabled={fingerprinting}
+                className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50"
+              >
                 <CameraIcon size={16} /> Capture
               </button>
             ) : (
@@ -382,7 +435,11 @@ export default function AddProductPage() {
           </p>
         )}
 
-        <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-60">
+        <button
+          type="submit"
+          disabled={saving || fingerprinting || (!!image && !featureCode)}
+          className="btn-primary flex items-center gap-2 disabled:opacity-60"
+        >
           {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
           {saving ? 'Saving...' : 'Save Product'}
         </button>

@@ -8,9 +8,11 @@
     "start": "next start"
   },
   "dependencies": {
+    "@imgly/background-removal": "^1.7.0",
     "lucide-react": "^1.7.0",
     "mongoose": "^9.3.3",
     "next": "^16.2.2",
+    "onnxruntime-web": "^1.21.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

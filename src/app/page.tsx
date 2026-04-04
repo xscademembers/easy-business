@@ -6,7 +6,10 @@ import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { Camera } from '@/components/Camera';
 import { ProductCard } from '@/components/ProductCard';
-import { generatePerceptualHash } from '@/lib/imageUtils';
+import {
+  generateProductFeatureCode,
+  PRODUCT_FEATURE_PIPELINE_VERSION,
+} from '@/lib/productImagePipeline';
 import { Camera as CameraIcon, Search, Sparkles, Package, ArrowRight } from 'lucide-react';
 
 export default function HomePage() {
@@ -26,16 +29,27 @@ export default function HomePage() {
 
   const handleCapture = async (imageDataUrl: string) => {
     setSearching(true);
-    setMessage('');
+    setMessage(
+      'Preparing scan (first visit may download the on-device model; this can take a minute)…'
+    );
     try {
-      const featureCode = await generatePerceptualHash(imageDataUrl);
+      const featureCode = await generateProductFeatureCode(imageDataUrl, {
+        progress: (key, current, total) => {
+          setMessage(`Loading ${key} (${current} / ${total})…`);
+        },
+      });
+      setMessage('Searching catalog…');
       const res = await fetch('/api/products/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ featureCode }),
+        body: JSON.stringify({
+          featureCode,
+          pipelineVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
+        }),
       });
       const data = await res.json();
       if (data.products?.length > 0) {
+        setMessage('');
         router.push(`/product/${data.products[0]._id}`);
       } else {
         setMessage('No matching product found. Try a different angle or search manually.');

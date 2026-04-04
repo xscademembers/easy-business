@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { compareHashes } from '@/lib/imageUtils';
+import { PRODUCT_FEATURE_PIPELINE_VERSION } from '@/lib/productFeatureConstants';
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +33,10 @@ export async function POST(request: Request) {
     }
 
     if (featureCode) {
-      const allProducts = await Product.find({ featureCode: { $ne: '' } }).lean();
+      const allProducts = await Product.find({
+        featureCode: { $ne: '' },
+        featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
+      }).lean();
       const matches = allProducts
         .map((p) => ({
           product: p,

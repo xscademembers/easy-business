@@ -12,7 +12,10 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import Link from 'next/link';
-import { generatePerceptualHash } from '@/lib/imageUtils';
+import {
+  generateProductFeatureCode,
+  PRODUCT_FEATURE_PIPELINE_VERSION,
+} from '@/lib/productImagePipeline';
 
 const CATEGORIES = ['clothing', 'electronics', 'food', 'utensils', 'other'];
 
@@ -72,6 +75,12 @@ export default function EditProductPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [fingerprinting, setFingerprinting] = useState(false);
+  const [fingerprintHint, setFingerprintHint] = useState('');
+  const [featureCodeVersion, setFeatureCodeVersion] = useState(1);
+  /** Bumped to cancel in-flight fingerprint work (migration vs retake/capture). */
+  const fingerprintGen = useRef(0);
+  const captureInProgress = useRef(false);
 
   useEffect(() => {
     fetch(`/api/products/${id}`)
@@ -89,6 +98,11 @@ export default function EditProductPage() {
         setCategoryFields(data.categoryFields || {});
         setImage(data.image || '');
         setFeatureCode(data.featureCode || '');
+        setFeatureCodeVersion(
+          typeof data.featureCodeVersion === 'number'
+            ? data.featureCodeVersion
+            : 1
+        );
         setVariants(
           (data.variants || []).map((v: any) => ({
             size: v.size || '',
@@ -101,6 +115,53 @@ export default function EditProductPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    fingerprintGen.current = 0;
+  }, [id]);
+
+  useEffect(() => {
+    if (loading || !image || featureCodeVersion === PRODUCT_FEATURE_PIPELINE_VERSION) return;
+    if (captureInProgress.current) return;
+
+    const gen = ++fingerprintGen.current;
+    let cancelled = false;
+
+    (async () => {
+      setFingerprinting(true);
+      setFingerprintHint('Upgrading scan fingerprint for new matcher…');
+      try {
+        const fc = await generateProductFeatureCode(image, {
+          progress: (key, current, total) => {
+            setFingerprintHint(`Loading ${key} (${current} / ${total})…`);
+          },
+        });
+        if (cancelled || gen !== fingerprintGen.current) return;
+        const res = await fetch(`/api/products/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            featureCode: fc,
+            featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
+          }),
+        });
+        if (cancelled || gen !== fingerprintGen.current) return;
+        if (res.ok) {
+          setFeatureCode(fc);
+          setFeatureCodeVersion(PRODUCT_FEATURE_PIPELINE_VERSION);
+          setFingerprintHint('');
+        }
+      } catch {
+        setFingerprintHint('');
+      } finally {
+        if (!cancelled && gen === fingerprintGen.current) setFingerprinting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, image, featureCodeVersion, id]);
 
   const startCamera = async () => {
     try {
@@ -131,15 +192,41 @@ export default function EditProductPage() {
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    fingerprintGen.current += 1;
+    const gen = fingerprintGen.current;
+    captureInProgress.current = true;
     setImage(dataUrl);
-    const hash = await generatePerceptualHash(dataUrl);
-    setFeatureCode(hash);
+    setFeatureCode('');
     stopCamera();
+    setFingerprinting(true);
+    setFingerprintHint('Preparing scan fingerprint…');
+    setError('');
+    try {
+      const hash = await generateProductFeatureCode(dataUrl, {
+        progress: (key, current, total) => {
+          setFingerprintHint(`Loading ${key} (${current} / ${total})…`);
+        },
+      });
+      if (gen !== fingerprintGen.current) return;
+      setFeatureCode(hash);
+      setFeatureCodeVersion(PRODUCT_FEATURE_PIPELINE_VERSION);
+      setFingerprintHint('');
+    } catch {
+      setError('Could not build product fingerprint. Try again or retake the photo.');
+      setImage('');
+      setFingerprintHint('');
+    } finally {
+      captureInProgress.current = false;
+      if (gen === fingerprintGen.current) setFingerprinting(false);
+    }
   };
 
   const retakeImage = () => {
+    fingerprintGen.current += 1;
     setImage('');
     setFeatureCode('');
+    setFeatureCodeVersion(1);
+    setFingerprintHint('');
     startCamera();
   };
 
@@ -166,6 +253,7 @@ export default function EditProductPage() {
         category: form.category,
         image,
         featureCode,
+        featureCodeVersion,
         categoryFields,
         variants: variants
           .filter((v) => v.size || v.color || v.material)
@@ -194,7 +282,11 @@ export default function EditProductPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 size={32} className="animate-spin" style={{ color: 'var(--accent)' }} />
+        <Loader2
+          size={32}
+          className="animate-spin motion-reduce:animate-none"
+          style={{ color: 'var(--accent)' }}
+        />
       </div>
     );
   }
@@ -225,6 +317,9 @@ export default function EditProductPage() {
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="card space-y-4">
           <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>Product Image</h2>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            Background is removed in the browser before saving a fingerprint, so scans match when only the product is visible.
+          </p>
           <div
             className="rounded-xl overflow-hidden aspect-[16/9] relative"
             style={{ backgroundColor: 'var(--bg-tertiary)', border: '2px solid var(--border)' }}
@@ -238,15 +333,41 @@ export default function EditProductPage() {
                 <CameraIcon size={48} style={{ color: 'var(--text-muted)' }} />
               </div>
             )}
+            {fingerprinting && (
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 text-center"
+                style={{ backgroundColor: 'color-mix(in srgb, var(--bg-primary) 88%, transparent)' }}
+              >
+                <Loader2
+                  className="animate-spin motion-reduce:animate-none"
+                  size={32}
+                  style={{ color: 'var(--accent)' }}
+                  aria-hidden
+                />
+                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  {fingerprintHint || 'Preparing fingerprint…'}
+                </span>
+              </div>
+            )}
           </div>
           <canvas ref={canvasRef} className="hidden" />
           <div className="flex gap-3">
             {image ? (
-              <button type="button" onClick={retakeImage} className="btn-secondary flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={retakeImage}
+                disabled={fingerprinting}
+                className="btn-secondary flex items-center gap-2 text-sm disabled:opacity-50"
+              >
                 <RotateCcw size={16} /> Retake
               </button>
             ) : cameraActive ? (
-              <button type="button" onClick={captureImage} className="btn-primary flex items-center gap-2 text-sm">
+              <button
+                type="button"
+                onClick={captureImage}
+                disabled={fingerprinting}
+                className="btn-primary flex items-center gap-2 text-sm disabled:opacity-50"
+              >
                 <CameraIcon size={16} /> Capture
               </button>
             ) : (
@@ -339,7 +460,11 @@ export default function EditProductPage() {
           <p className="text-sm px-4 py-3 rounded-xl" style={{ backgroundColor: 'color-mix(in srgb, var(--danger) 10%, transparent)', color: 'var(--danger)' }}>{error}</p>
         )}
 
-        <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2 disabled:opacity-60">
+        <button
+          type="submit"
+          disabled={saving || fingerprinting || (!!image && !featureCode)}
+          className="btn-primary flex items-center gap-2 disabled:opacity-60"
+        >
           {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
           {saving ? 'Saving...' : 'Update Product'}
         </button>

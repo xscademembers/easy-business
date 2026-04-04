@@ -111,7 +111,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <Loader2
               size={40}
-              className="text-white animate-spin"
+              className="text-white animate-spin motion-reduce:animate-none"
             />
           </div>
         )}
