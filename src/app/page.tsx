@@ -7,7 +7,7 @@ import { Footer } from '@/components/Footer';
 import { Camera } from '@/components/Camera';
 import { ProductCard } from '@/components/ProductCard';
 import {
-  generateProductFeatureCode,
+  processProductImage,
   PRODUCT_FEATURE_PIPELINE_VERSION,
 } from '@/lib/productImagePipeline';
 import { Camera as CameraIcon, Search, Sparkles, Package, ArrowRight } from 'lucide-react';
@@ -30,12 +30,12 @@ export default function HomePage() {
   const handleCapture = async (imageDataUrl: string) => {
     setSearching(true);
     setMessage(
-      'Preparing scan (first visit may download the on-device model; this can take a minute)…'
+      'Scanning image (first visit downloads on-device models; may take a minute)…'
     );
     try {
-      const featureCode = await generateProductFeatureCode(imageDataUrl, {
+      const result = await processProductImage(imageDataUrl, {
         progress: (key, current, total) => {
-          setMessage(`Loading ${key} (${current} / ${total})…`);
+          setMessage(`${key} (${current} / ${total})`);
         },
       });
       setMessage('Searching catalog…');
@@ -43,7 +43,8 @@ export default function HomePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          featureCode,
+          featureCode: result.featureCode,
+          ocrText: result.ocrText,
           pipelineVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
         }),
       });

@@ -11,7 +11,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import {
-  generateProductFeatureCode,
+  processProductImage,
   PRODUCT_FEATURE_PIPELINE_VERSION,
 } from '@/lib/productImagePipeline';
 
@@ -66,6 +66,7 @@ export default function AddProductPage() {
   const [variants, setVariants] = useState<Variant[]>([]);
   const [image, setImage] = useState('');
   const [featureCode, setFeatureCode] = useState('');
+  const [ocrText, setOcrText] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [saving, setSaving] = useState(false);
@@ -114,20 +115,22 @@ export default function AddProductPage() {
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     setImage(dataUrl);
     setFeatureCode('');
+    setOcrText('');
     stopCamera();
     setFingerprinting(true);
-    setFingerprintHint('Preparing scan fingerprint…');
+    setFingerprintHint('Scanning image (OCR + fingerprint)…');
     setError('');
     try {
-      const hash = await generateProductFeatureCode(dataUrl, {
+      const result = await processProductImage(dataUrl, {
         progress: (key, current, total) => {
-          setFingerprintHint(`Loading ${key} (${current} / ${total})…`);
+          setFingerprintHint(`${key} (${current} / ${total})`);
         },
       });
-      setFeatureCode(hash);
+      setFeatureCode(result.featureCode);
+      setOcrText(result.ocrText);
       setFingerprintHint('');
     } catch {
-      setError('Could not build product fingerprint. Try again or retake the photo.');
+      setError('Could not process product image. Try again or retake the photo.');
       setImage('');
       setFingerprintHint('');
     } finally {
@@ -138,6 +141,7 @@ export default function AddProductPage() {
   const retakeImage = () => {
     setImage('');
     setFeatureCode('');
+    setOcrText('');
     setFingerprintHint('');
     startCamera();
   };
@@ -168,6 +172,7 @@ export default function AddProductPage() {
         image,
         featureCode,
         featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
+        ocrText,
         categoryFields,
         variants: variants
           .filter((v) => v.size || v.color || v.material)
@@ -284,6 +289,18 @@ export default function AddProductPage() {
               </button>
             )}
           </div>
+
+          {ocrText && (
+            <div
+              className="rounded-xl p-3 text-sm"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+            >
+              <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                OCR Text Detected:
+              </span>{' '}
+              {ocrText}
+            </div>
+          )}
         </div>
 
         <div className="card space-y-4">

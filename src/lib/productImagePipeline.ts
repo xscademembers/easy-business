@@ -1,5 +1,6 @@
 import { generatePerceptualHash } from './imageUtils';
 import { PRODUCT_FEATURE_PIPELINE_VERSION } from './productFeatureConstants';
+import { extractTextFromImage, normalizeOcrText } from './ocrUtils';
 
 export type ProductImageProgress = (
   key: string,
@@ -8,6 +9,11 @@ export type ProductImageProgress = (
 ) => void;
 
 export { PRODUCT_FEATURE_PIPELINE_VERSION };
+
+export interface ProductImageResult {
+  featureCode: string;
+  ocrText: string;
+}
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -18,9 +24,6 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Crops to the bounding box of non-transparent pixels (foreground cutout).
- */
 export function trimTransparentDataUrl(
   dataUrl: string,
   options: { minAlpha?: number; padding?: number } = {}
@@ -108,9 +111,6 @@ export function trimTransparentDataUrl(
   });
 }
 
-/**
- * Fallback when background removal fails: center square crop so edge background matters less.
- */
 export function centerCropDataUrl(
   dataUrl: string,
   ratio = 0.68
@@ -147,11 +147,7 @@ export function centerCropDataUrl(
   });
 }
 
-/**
- * Removes background (in-browser), trims to foreground, then hashes.
- * Falls back to center crop + same hash if removal fails.
- */
-export async function prepareProductImageForMatching(
+async function prepareProductImageForMatching(
   rawDataUrl: string,
   options?: { progress?: ProductImageProgress }
 ): Promise<string> {
@@ -177,10 +173,41 @@ export async function prepareProductImageForMatching(
   }
 }
 
+/**
+ * Full pipeline: runs background-removal + perceptual hash AND OCR in parallel.
+ * Returns both the featureCode (visual hash) and ocrText (normalised OCR output).
+ */
+export async function processProductImage(
+  rawDataUrl: string,
+  options?: { progress?: ProductImageProgress }
+): Promise<ProductImageResult> {
+  const progress = options?.progress;
+
+  const [featureCode, ocr] = await Promise.all([
+    (async () => {
+      const prepared = await prepareProductImageForMatching(rawDataUrl, options);
+      return generatePerceptualHash(prepared);
+    })(),
+    (async () => {
+      if (progress) progress('Running OCR…', 0, 1);
+      const result = await extractTextFromImage(rawDataUrl, (status, pct) => {
+        if (progress) progress(`OCR: ${status}`, pct, 1);
+      });
+      if (progress) progress('OCR complete', 1, 1);
+      return result.normalized;
+    })(),
+  ]);
+
+  return { featureCode, ocrText: ocr };
+}
+
+/** @deprecated Use processProductImage instead. Kept for backward compatibility. */
 export async function generateProductFeatureCode(
   rawDataUrl: string,
   options?: { progress?: ProductImageProgress }
 ): Promise<string> {
-  const prepared = await prepareProductImageForMatching(rawDataUrl, options);
-  return generatePerceptualHash(prepared);
+  const result = await processProductImage(rawDataUrl, options);
+  return result.featureCode;
 }
+
+export { normalizeOcrText };

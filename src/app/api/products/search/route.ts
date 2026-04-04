@@ -3,15 +3,19 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { compareHashes } from '@/lib/imageUtils';
 import { PRODUCT_FEATURE_PIPELINE_VERSION } from '@/lib/productFeatureConstants';
+import { compareOcrTexts } from '@/lib/ocrUtils';
 
 export async function POST(request: Request) {
   try {
     await connectDB();
-    const { featureCode, productId, query } = await request.json();
+    const { featureCode, ocrText, productId, query } = await request.json();
 
     if (productId) {
       const product = await Product.findOne({
-        $or: [{ productId }, { _id: productId.match(/^[0-9a-fA-F]{24}$/) ? productId : undefined }],
+        $or: [
+          { productId },
+          { _id: productId.match(/^[0-9a-fA-F]{24}$/) ? productId : undefined },
+        ],
       }).lean();
       if (product) {
         return NextResponse.json({ products: [product], matchType: 'exact' });
@@ -25,6 +29,7 @@ export async function POST(request: Request) {
           { name: { $regex: query, $options: 'i' } },
           { productId: { $regex: query, $options: 'i' } },
           { description: { $regex: query, $options: 'i' } },
+          { ocrText: { $regex: query, $options: 'i' } },
         ],
       })
         .limit(20)
@@ -32,30 +37,71 @@ export async function POST(request: Request) {
       return NextResponse.json({ products, matchType: 'text' });
     }
 
-    if (featureCode) {
+    if (ocrText || featureCode) {
       const allProducts = await Product.find({
-        featureCode: { $ne: '' },
-        featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
+        $or: [
+          { ocrText: { $ne: '' } },
+          {
+            featureCode: { $ne: '' },
+            featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
+          },
+        ],
       }).lean();
-      const matches = allProducts
-        .map((p) => ({
-          product: p,
-          similarity: compareHashes(featureCode, p.featureCode),
-        }))
-        .filter((m) => m.similarity >= 80)
-        .sort((a, b) => b.similarity - a.similarity);
+
+      const scored = allProducts.map((p) => {
+        const ocrScore =
+          ocrText && p.ocrText ? compareOcrTexts(p.ocrText, ocrText) : 0;
+
+        const hashScore =
+          featureCode &&
+          p.featureCode &&
+          p.featureCodeVersion === PRODUCT_FEATURE_PIPELINE_VERSION
+            ? compareHashes(featureCode, p.featureCode)
+            : 0;
+
+        return { product: p, ocrScore, hashScore };
+      });
+
+      /*
+       * Matching strategy:
+       *   1. OCR is primary — if ≥60% of the product's stored words are found
+       *      (fuzzy) in the scanned text, it's a match. 60% handles OCR noise
+       *      while being strict enough to reject unrelated products.
+       *   2. Visual hash is backup — only used when OCR found no text at all.
+       *
+       * The containment algorithm already ignores background words, so changed
+       * backgrounds don't lower the score. Rotation/zoom are handled by the
+       * image preprocessing (grayscale + contrast) before OCR.
+       */
+      const OCR_THRESHOLD = 60;
+      const HASH_THRESHOLD = 80;
+
+      const matches = scored
+        .filter(
+          (m) => m.ocrScore >= OCR_THRESHOLD || m.hashScore >= HASH_THRESHOLD
+        )
+        .sort((a, b) => {
+          if (a.ocrScore !== b.ocrScore) return b.ocrScore - a.ocrScore;
+          return b.hashScore - a.hashScore;
+        });
 
       if (matches.length > 0) {
         return NextResponse.json({
-          products: matches.map((m) => ({ ...m.product, similarity: m.similarity })),
+          products: matches.map((m) => ({
+            ...m.product,
+            similarity: Math.max(m.ocrScore, m.hashScore),
+            ocrScore: m.ocrScore,
+            hashScore: m.hashScore,
+          })),
           matchType: 'image',
         });
       }
+
       return NextResponse.json({ products: [], matchType: 'none' });
     }
 
     return NextResponse.json(
-      { error: 'Provide featureCode, productId, or query' },
+      { error: 'Provide featureCode, ocrText, productId, or query' },
       { status: 400 }
     );
   } catch (error) {

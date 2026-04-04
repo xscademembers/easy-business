@@ -21,8 +21,8 @@ const ProductSchema = new mongoose.Schema(
     },
     image: { type: String, default: '' },
     featureCode: { type: String, default: '' },
-    /** Fingerprint pipeline version; image search only matches v2+ (background-removed / cropped). */
     featureCodeVersion: { type: Number, default: 1 },
+    ocrText: { type: String, default: '' },
     variants: [VariantSchema],
     categoryFields: { type: mongoose.Schema.Types.Mixed, default: {} },
   },

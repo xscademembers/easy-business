@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  generateProductFeatureCode,
+  processProductImage,
   PRODUCT_FEATURE_PIPELINE_VERSION,
 } from '@/lib/productImagePipeline';
 
@@ -70,6 +70,7 @@ export default function EditProductPage() {
   const [variants, setVariants] = useState<Variant[]>([]);
   const [image, setImage] = useState('');
   const [featureCode, setFeatureCode] = useState('');
+  const [ocrText, setOcrText] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [saving, setSaving] = useState(false);
@@ -98,6 +99,7 @@ export default function EditProductPage() {
         setCategoryFields(data.categoryFields || {});
         setImage(data.image || '');
         setFeatureCode(data.featureCode || '');
+        setOcrText(data.ocrText || '');
         setFeatureCodeVersion(
           typeof data.featureCodeVersion === 'number'
             ? data.featureCodeVersion
@@ -139,11 +141,11 @@ export default function EditProductPage() {
 
     (async () => {
       setFingerprinting(true);
-      setFingerprintHint('Upgrading scan fingerprint for new matcher…');
+      setFingerprintHint('Upgrading product scan data…');
       try {
-        const fc = await generateProductFeatureCode(image, {
+        const result = await processProductImage(image, {
           progress: (key, current, total) => {
-            setFingerprintHint(`Loading ${key} (${current} / ${total})…`);
+            setFingerprintHint(`${key} (${current} / ${total})`);
           },
         });
         if (cancelled || gen !== fingerprintGen.current) return;
@@ -151,13 +153,15 @@ export default function EditProductPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            featureCode: fc,
+            featureCode: result.featureCode,
+            ocrText: result.ocrText,
             featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
           }),
         });
         if (cancelled || gen !== fingerprintGen.current) return;
         if (res.ok) {
-          setFeatureCode(fc);
+          setFeatureCode(result.featureCode);
+          setOcrText(result.ocrText);
           setFeatureCodeVersion(PRODUCT_FEATURE_PIPELINE_VERSION);
           setFingerprintHint('');
         }
@@ -207,22 +211,24 @@ export default function EditProductPage() {
     captureInProgress.current = true;
     setImage(dataUrl);
     setFeatureCode('');
+    setOcrText('');
     stopCamera();
     setFingerprinting(true);
-    setFingerprintHint('Preparing scan fingerprint…');
+    setFingerprintHint('Scanning image (OCR + fingerprint)…');
     setError('');
     try {
-      const hash = await generateProductFeatureCode(dataUrl, {
+      const result = await processProductImage(dataUrl, {
         progress: (key, current, total) => {
-          setFingerprintHint(`Loading ${key} (${current} / ${total})…`);
+          setFingerprintHint(`${key} (${current} / ${total})`);
         },
       });
       if (gen !== fingerprintGen.current) return;
-      setFeatureCode(hash);
+      setFeatureCode(result.featureCode);
+      setOcrText(result.ocrText);
       setFeatureCodeVersion(PRODUCT_FEATURE_PIPELINE_VERSION);
       setFingerprintHint('');
     } catch {
-      setError('Could not build product fingerprint. Try again or retake the photo.');
+      setError('Could not process product image. Try again or retake the photo.');
       setImage('');
       setFingerprintHint('');
     } finally {
@@ -235,6 +241,7 @@ export default function EditProductPage() {
     fingerprintGen.current += 1;
     setImage('');
     setFeatureCode('');
+    setOcrText('');
     setFeatureCodeVersion(1);
     setFingerprintHint('');
     startCamera();
@@ -264,6 +271,7 @@ export default function EditProductPage() {
         image,
         featureCode,
         featureCodeVersion,
+        ocrText,
         categoryFields,
         variants: variants
           .filter((v) => v.size || v.color || v.material)
@@ -392,6 +400,18 @@ export default function EditProductPage() {
               </button>
             )}
           </div>
+
+          {ocrText && (
+            <div
+              className="rounded-xl p-3 text-sm"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+            >
+              <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                OCR Text Detected:
+              </span>{' '}
+              {ocrText}
+            </div>
+          )}
         </div>
 
         <div className="card space-y-4">
