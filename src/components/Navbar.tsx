@@ -59,7 +59,7 @@ export function Navbar() {
               />
               <input
                 type="text"
-                placeholder="Search by Product ID..."
+                placeholder="Search by name or product ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="input-field pl-10 !py-2 !rounded-full text-sm"
@@ -120,7 +120,7 @@ export function Navbar() {
                 />
                 <input
                   type="text"
-                  placeholder="Search by Product ID..."
+                  placeholder="Search by name or product ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="input-field pl-10 !py-2 text-sm"

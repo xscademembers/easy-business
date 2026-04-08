@@ -1,33 +1,28 @@
 import mongoose from 'mongoose';
-
-const VariantSchema = new mongoose.Schema({
-  size: String,
-  color: String,
-  material: String,
-  price: Number,
-});
+import {
+  EMBEDDING_DIMENSION,
+  PRODUCTS_COLLECTION,
+} from '@/lib/constants/vectorSearch';
 
 const ProductSchema = new mongoose.Schema(
   {
-    productId: { type: String, required: true, unique: true },
     name: { type: String, required: true },
-    description: { type: String, default: '' },
-    stock: { type: Number, required: true, default: 0 },
     price: { type: Number, required: true },
-    category: {
-      type: String,
+    image_url: { type: String, required: true },
+    embedding: {
+      type: [Number],
       required: true,
-      enum: ['clothing', 'electronics', 'food', 'utensils', 'other'],
+      select: false,
+      validate: {
+        validator(v: number[]) {
+          return Array.isArray(v) && v.length === EMBEDDING_DIMENSION;
+        },
+        message: `embedding must be an array of ${EMBEDDING_DIMENSION} numbers`,
+      },
     },
-    image: { type: String, default: '' },
-    featureCode: { type: String, default: '' },
-    featureCodeVersion: { type: Number, default: 1 },
-    ocrText: { type: String, default: '' },
-    variants: [VariantSchema],
-    categoryFields: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );
 
 export default mongoose.models.Product ||
-  mongoose.model('Product', ProductSchema);
+  mongoose.model('Product', ProductSchema, PRODUCTS_COLLECTION);

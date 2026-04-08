@@ -1,109 +1,73 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
-import { compareHashes } from '@/lib/imageUtils';
-import { PRODUCT_FEATURE_PIPELINE_VERSION } from '@/lib/productFeatureConstants';
-import { compareOcrTexts } from '@/lib/ocrUtils';
+import { compressImageForClip } from '@/lib/services/imageCompressionServer';
+import { getClipEmbeddingFromJpegBuffer } from '@/lib/services/clipApi';
+import { findNearestProductsByEmbedding } from '@/lib/services/vectorSearch';
+
+const publicFields = 'name price image_url';
 
 export async function POST(request: Request) {
   try {
     await connectDB();
-    const { featureCode, ocrText, productId, query } = await request.json();
+    const body = await request.json();
+    const { imageBase64, query, id } = body as {
+      imageBase64?: string;
+      query?: string;
+      id?: string;
+    };
 
-    if (productId) {
-      const product = await Product.findOne({
-        $or: [
-          { productId },
-          { _id: productId.match(/^[0-9a-fA-F]{24}$/) ? productId : undefined },
-        ],
-      }).lean();
+    const idStr = typeof id === 'string' ? id.trim() : '';
+    if (idStr && /^[0-9a-fA-F]{24}$/.test(idStr)) {
+      const product = await Product.findById(idStr).select(publicFields).lean();
       if (product) {
         return NextResponse.json({ products: [product], matchType: 'exact' });
       }
       return NextResponse.json({ products: [], matchType: 'none' });
     }
 
-    if (query) {
+    const q = typeof query === 'string' ? query.trim() : '';
+    if (q) {
       const products = await Product.find({
-        $or: [
-          { name: { $regex: query, $options: 'i' } },
-          { productId: { $regex: query, $options: 'i' } },
-          { description: { $regex: query, $options: 'i' } },
-          { ocrText: { $regex: query, $options: 'i' } },
-        ],
+        name: { $regex: q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
       })
+        .select(publicFields)
         .limit(20)
         .lean();
       return NextResponse.json({ products, matchType: 'text' });
     }
 
-    if (ocrText || featureCode) {
-      const allProducts = await Product.find({
-        $or: [
-          { ocrText: { $ne: '' } },
-          {
-            featureCode: { $ne: '' },
-            featureCodeVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
-          },
-        ],
-      }).lean();
+    if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
+      const { buffer } = await compressImageForClip(imageBase64);
+      const embedding = await getClipEmbeddingFromJpegBuffer(buffer);
+      const hits = await findNearestProductsByEmbedding(embedding, 1);
 
-      const scored = allProducts.map((p) => {
-        const ocrScore =
-          ocrText && p.ocrText ? compareOcrTexts(p.ocrText, ocrText) : 0;
-
-        const hashScore =
-          featureCode &&
-          p.featureCode &&
-          p.featureCodeVersion === PRODUCT_FEATURE_PIPELINE_VERSION
-            ? compareHashes(featureCode, p.featureCode)
-            : 0;
-
-        return { product: p, ocrScore, hashScore };
-      });
-
-      /*
-       * Matching strategy:
-       *   1. Text-from-photo match is primary — ≥55% word overlap (fuzzy).
-       *   2. Visual similarity is backup when little or no text is read.
-       *
-       * The containment algorithm already ignores background words, so changed
-       * backgrounds don't lower the score. Rotation/zoom are partially handled by
-       * image preprocessing (grayscale + contrast) and the visual hash backup.
-       */
-      const OCR_THRESHOLD = 55;
-      const HASH_THRESHOLD = 75;
-
-      const matches = scored
-        .filter(
-          (m) => m.ocrScore >= OCR_THRESHOLD || m.hashScore >= HASH_THRESHOLD
-        )
-        .sort((a, b) => {
-          if (a.ocrScore !== b.ocrScore) return b.ocrScore - a.ocrScore;
-          return b.hashScore - a.hashScore;
-        });
-
-      if (matches.length > 0) {
-        return NextResponse.json({
-          products: matches.map((m) => ({
-            ...m.product,
-            similarity: Math.max(m.ocrScore, m.hashScore),
-            ocrScore: m.ocrScore,
-            hashScore: m.hashScore,
-          })),
-          matchType: 'image',
-        });
+      if (hits.length === 0) {
+        return NextResponse.json({ products: [], matchType: 'none' });
       }
 
-      return NextResponse.json({ products: [], matchType: 'none' });
+      const top = hits[0]!;
+      return NextResponse.json({
+        products: [
+          {
+            _id: top._id,
+            name: top.name,
+            price: top.price,
+            image_url: top.image_url,
+            score: top.score,
+          },
+        ],
+        matchType: 'vector',
+      });
     }
 
     return NextResponse.json(
-      { error: 'Provide featureCode, ocrText, productId, or query' },
+      { error: 'Provide imageBase64, query, or id (24-char hex)' },
       { status: 400 }
     );
   } catch (error) {
     console.error('POST /api/products/search error:', error);
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Search failed';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

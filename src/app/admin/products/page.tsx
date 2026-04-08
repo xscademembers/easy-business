@@ -30,7 +30,7 @@ export default function AdminProductsPage() {
   };
 
   useEffect(() => {
-    fetchProducts();
+    void fetchProducts();
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -43,10 +43,8 @@ export default function AdminProductsPage() {
     }
   };
 
-  const filtered = products.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.productId.toLowerCase().includes(search.toLowerCase())
+  const filtered = products.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -60,7 +58,7 @@ export default function AdminProductsPage() {
             Products
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Manage your product catalog
+            CLIP embeddings + Atlas vector index &quot;vector_index&quot;
           </p>
         </div>
         <Link
@@ -68,7 +66,7 @@ export default function AdminProductsPage() {
           className="btn-primary flex items-center gap-2 shrink-0 self-start"
         >
           <Plus size={18} />
-          Add Product
+          Add product
         </Link>
       </div>
 
@@ -81,7 +79,7 @@ export default function AdminProductsPage() {
           />
           <input
             type="text"
-            placeholder="Search products..."
+            placeholder="Search by name…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="input-field pl-10"
@@ -92,7 +90,7 @@ export default function AdminProductsPage() {
           <div className="flex justify-center py-12">
             <Loader2
               size={32}
-              className="animate-spin"
+              className="animate-spin motion-reduce:animate-none"
               style={{ color: 'var(--accent)' }}
             />
           </div>
@@ -109,91 +107,97 @@ export default function AdminProductsPage() {
           </div>
         ) : (
           <>
-          {/* Mobile card layout */}
-          <div className="sm:hidden space-y-3">
-            {filtered.map((product) => (
-              <div
-                key={product._id}
-                className="rounded-xl p-3"
-                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border)' }}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="w-12 h-12 rounded-lg overflow-hidden shrink-0"
-                    style={{ backgroundColor: 'var(--bg-tertiary)' }}
-                  >
-                    {product.image ? (
-                      <img src={product.image} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package size={16} style={{ color: 'var(--text-muted)' }} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate" style={{ color: 'var(--text-primary)' }}>
-                      {product.name}
-                    </p>
-                    <p className="text-xs font-mono" style={{ color: 'var(--accent)' }}>
-                      {product.productId}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span
-                        className="text-xs font-medium px-2 py-0.5 rounded-md capitalize"
-                        style={{ backgroundColor: 'var(--accent-light)', color: 'var(--accent)' }}
+            <div className="sm:hidden space-y-3">
+              {filtered.map((product) => (
+                <div
+                  key={product._id}
+                  className="rounded-xl p-3"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className="w-12 h-12 rounded-lg overflow-hidden shrink-0"
+                      style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                    >
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package
+                            size={16}
+                            style={{ color: 'var(--text-muted)' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="font-medium text-sm truncate"
+                        style={{ color: 'var(--text-primary)' }}
                       >
-                        {product.category}
-                      </span>
-                      <span
-                        className="text-xs font-medium"
-                        style={{ color: product.stock > 0 ? 'var(--success)' : 'var(--danger)' }}
+                        {product.name}
+                      </p>
+                      <p
+                        className="text-xs font-mono truncate"
+                        style={{ color: 'var(--text-muted)' }}
                       >
-                        Stock: {product.stock}
-                      </span>
-                      <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+                        {product._id}
+                      </p>
+                      <span
+                        className="text-xs font-semibold mt-1 inline-block"
+                        style={{ color: 'var(--accent)' }}
+                      >
                         ${product.price.toFixed(2)}
                       </span>
                     </div>
                   </div>
+                  <div
+                    className="flex items-center gap-1 mt-2 pt-2 border-t"
+                    style={{ borderColor: 'var(--border)' }}
+                  >
+                    <Link
+                      href={`/admin/products/${product._id}`}
+                      className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
+                      style={{ color: 'var(--accent)' }}
+                    >
+                      <Pencil size={14} /> Edit
+                    </Link>
+                    <Link
+                      href={`/product/${product._id}`}
+                      target="_blank"
+                      className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
+                      style={{ color: 'var(--success)' }}
+                    >
+                      <Eye size={14} /> View
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(product._id)}
+                      className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
+                      style={{ color: 'var(--danger)' }}
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 mt-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
-                  <Link
-                    href={`/admin/products/${product._id}`}
-                    className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
-                    style={{ color: 'var(--accent)' }}
-                  >
-                    <Pencil size={14} /> Edit
-                  </Link>
-                  <Link
-                    href={`/product/${product._id}`}
-                    target="_blank"
-                    className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
-                    style={{ color: 'var(--success)' }}
-                  >
-                    <Eye size={14} /> View
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(product._id)}
-                    className="flex-1 flex items-center justify-center gap-1 p-2 rounded-lg text-xs font-medium transition-colors"
-                    style={{ color: 'var(--danger)' }}
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          {/* Desktop table layout */}
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr
-                  className="border-b text-left"
-                  style={{ borderColor: 'var(--border)' }}
-                >
-                  {['Product ID', 'Name', 'Category', 'Stock', 'Price', 'Actions'].map(
-                    (h) => (
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr
+                    className="border-b text-left"
+                    style={{ borderColor: 'var(--border)' }}
+                  >
+                    {['Product', 'ID', 'Price', 'Actions'].map((h) => (
                       <th
                         key={h}
                         className="pb-3 text-xs font-semibold uppercase tracking-wider"
@@ -201,120 +205,96 @@ export default function AdminProductsPage() {
                       >
                         {h}
                       </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((product) => (
-                  <tr
-                    key={product._id}
-                    className="border-b last:border-0"
-                    style={{ borderColor: 'var(--border)' }}
-                  >
-                    <td className="py-3 pr-4">
-                      <span
-                        className="text-sm font-mono"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        {product.productId}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg overflow-hidden shrink-0"
-                          style={{ backgroundColor: 'var(--bg-tertiary)' }}
-                        >
-                          {product.image ? (
-                            <img
-                              src={product.image}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Package
-                                size={16}
-                                style={{ color: 'var(--text-muted)' }}
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((product) => (
+                    <tr
+                      key={product._id}
+                      className="border-b last:border-0"
+                      style={{ borderColor: 'var(--border)' }}
+                    >
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-10 h-10 rounded-lg overflow-hidden shrink-0"
+                            style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                          >
+                            {product.image_url ? (
+                              <img
+                                src={product.image_url}
+                                alt=""
+                                className="w-full h-full object-cover"
                               />
-                            </div>
-                          )}
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Package
+                                  size={16}
+                                  style={{ color: 'var(--text-muted)' }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          <span
+                            className="text-sm font-medium"
+                            style={{ color: 'var(--text-primary)' }}
+                          >
+                            {product.name}
+                          </span>
                         </div>
+                      </td>
+                      <td className="py-3 pr-4">
                         <span
-                          className="text-sm font-medium"
+                          className="text-xs font-mono"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          {product._id}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span
+                          className="text-sm font-semibold"
                           style={{ color: 'var(--text-primary)' }}
                         >
-                          {product.name}
+                          ${product.price.toFixed(2)}
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span
-                        className="text-xs font-medium px-2 py-1 rounded-md capitalize"
-                        style={{
-                          backgroundColor: 'var(--accent-light)',
-                          color: 'var(--accent)',
-                        }}
-                      >
-                        {product.category}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span
-                        className="text-sm font-medium"
-                        style={{
-                          color:
-                            product.stock > 0
-                              ? 'var(--success)'
-                              : 'var(--danger)',
-                        }}
-                      >
-                        {product.stock}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <span
-                        className="text-sm font-semibold"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        ${product.price.toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="py-3">
-                      <div className="flex items-center gap-1">
-                        <Link
-                          href={`/admin/products/${product._id}`}
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ color: 'var(--accent)' }}
-                          title="Edit product"
-                        >
-                          <Pencil size={16} />
-                        </Link>
-                        <Link
-                          href={`/product/${product._id}`}
-                          target="_blank"
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ color: 'var(--success)' }}
-                          title="View public page"
-                        >
-                          <Eye size={16} />
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(product._id)}
-                          className="p-2 rounded-lg transition-colors"
-                          style={{ color: 'var(--danger)' }}
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                      <td className="py-3">
+                        <div className="flex items-center gap-1">
+                          <Link
+                            href={`/admin/products/${product._id}`}
+                            className="p-2 rounded-lg transition-colors"
+                            style={{ color: 'var(--accent)' }}
+                            title="Edit"
+                          >
+                            <Pencil size={16} />
+                          </Link>
+                          <Link
+                            href={`/product/${product._id}`}
+                            target="_blank"
+                            className="p-2 rounded-lg transition-colors"
+                            style={{ color: 'var(--success)' }}
+                            title="View"
+                          >
+                            <Eye size={16} />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(product._id)}
+                            className="p-2 rounded-lg transition-colors"
+                            style={{ color: 'var(--danger)' }}
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>

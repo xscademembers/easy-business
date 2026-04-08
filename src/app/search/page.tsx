@@ -16,9 +16,9 @@ function SearchContent() {
 
   useEffect(() => {
     if (query) {
-      doSearch(query);
+      void doSearch(query);
     } else {
-      fetchAll();
+      void fetchAll();
     }
   }, [query]);
 
@@ -39,10 +39,15 @@ function SearchContent() {
   const doSearch = async (q: string) => {
     setLoading(true);
     try {
+      const trimmed = q.trim();
+      const body =
+        /^[0-9a-fA-F]{24}$/.test(trimmed)
+          ? { id: trimmed }
+          : { query: trimmed };
       const res = await fetch('/api/products/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: q, productId: q }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       setResults(data.products || []);
@@ -81,7 +86,7 @@ function SearchContent() {
             <div className="flex justify-center py-16">
               <Loader2
                 size={40}
-                className="animate-spin"
+                className="animate-spin motion-reduce:animate-none"
                 style={{ color: 'var(--accent)' }}
               />
             </div>
@@ -125,7 +130,7 @@ export default function SearchPage() {
             <div className="flex justify-center py-24">
               <Loader2
                 size={40}
-                className="animate-spin"
+                className="animate-spin motion-reduce:animate-none"
                 style={{ color: 'var(--accent)' }}
               />
             </div>

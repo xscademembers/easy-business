@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Order from '@/lib/models/Order';
 import Customer from '@/lib/models/Customer';
-import Product from '@/lib/models/Product';
 
 export async function GET() {
   try {
@@ -50,13 +49,6 @@ export async function POST(request: Request) {
 
     customer.orders.push(order._id);
     await customer.save();
-
-    for (const item of items) {
-      await Product.findOneAndUpdate(
-        { productId: item.productId },
-        { $inc: { stock: -item.quantity } }
-      );
-    }
 
     return NextResponse.json(order, { status: 201 });
   } catch (error) {

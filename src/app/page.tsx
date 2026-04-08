@@ -5,13 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { Camera } from '@/components/Camera';
-import {
-  processProductImage,
-  PRODUCT_FEATURE_PIPELINE_VERSION,
-} from '@/lib/productImagePipeline';
-import { SCAN_CHECKING_STORE, SCAN_WORKING } from '@/lib/scanUiCopy';
-import { ScanProgressBar } from '@/components/ScanProgressBar';
-import { Camera as CameraIcon, Search, Sparkles } from 'lucide-react';
+import { Camera as CameraIcon, Search, Sparkles, Loader2 } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
@@ -19,45 +13,44 @@ export default function HomePage() {
   const [searchId, setSearchId] = useState('');
   const [showCamera, setShowCamera] = useState(false);
   const [message, setMessage] = useState('');
-  const [scanProgress, setScanProgress] = useState(0);
 
   const handleCapture = async (imageDataUrl: string) => {
     setSearching(true);
-    setScanProgress(0);
-    setMessage(SCAN_WORKING);
+    setMessage('Finding your product…');
     try {
-      const result = await processProductImage(imageDataUrl, {
-        onProgress: setScanProgress,
-      });
-      setMessage(SCAN_CHECKING_STORE);
       const res = await fetch('/api/products/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          featureCode: result.featureCode,
-          ocrText: result.ocrText,
-          pipelineVersion: PRODUCT_FEATURE_PIPELINE_VERSION,
-        }),
+        body: JSON.stringify({ imageBase64: imageDataUrl }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Search failed');
+      }
       if (data.products?.length > 0) {
         setMessage('');
         router.push(`/product/${data.products[0]._id}`);
       } else {
-        setMessage('No matching product found. Try a different angle or search manually.');
+        setMessage('No matching product found. Try a different angle or search by ID.');
       }
-    } catch {
-      setMessage('Search failed. Please try again.');
+    } catch (e) {
+      setMessage(
+        e instanceof Error ? e.message : 'Search failed. Please try again.'
+      );
     } finally {
       setSearching(false);
-      setScanProgress(0);
     }
   };
 
   const handleIdSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchId.trim()) return;
-    router.push(`/search?q=${encodeURIComponent(searchId.trim())}`);
+    const q = searchId.trim();
+    if (/^[0-9a-fA-F]{24}$/.test(q)) {
+      router.push(`/product/${q}`);
+      return;
+    }
+    router.push(`/search?q=${encodeURIComponent(q)}`);
   };
 
   return (
@@ -67,7 +60,8 @@ export default function HomePage() {
         <section
           className="relative overflow-hidden"
           style={{
-            background: 'linear-gradient(135deg, var(--gradient-start), var(--gradient-end))',
+            background:
+              'linear-gradient(135deg, var(--gradient-start), var(--gradient-end))',
           }}
         >
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
@@ -81,14 +75,14 @@ export default function HomePage() {
                   }}
                 >
                   <Sparkles size={14} />
-                  AI-Powered Product Search
+                  Visual product search
                 </div>
 
                 <h1
                   className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight"
                   style={{ color: 'var(--text-primary)' }}
                 >
-                  Scan. Search.{' '}
+                  Scan. Match.{' '}
                   <span style={{ color: 'var(--accent)' }}>Shop.</span>
                 </h1>
 
@@ -96,8 +90,8 @@ export default function HomePage() {
                   className="text-lg md:text-xl leading-relaxed max-w-lg"
                   style={{ color: 'var(--text-secondary)' }}
                 >
-                  Use your camera to instantly identify products or search by
-                  Product ID. Shopping made effortless.
+                  Take a photo and we&apos;ll match it to the closest product in
+                  the catalog using image embeddings.
                 </p>
 
                 <div className="flex flex-wrap gap-3">
@@ -108,9 +102,12 @@ export default function HomePage() {
                     <CameraIcon size={18} />
                     {showCamera ? 'Hide Camera' : 'Scan Product'}
                   </button>
-                  <a href="#search" className="btn-secondary flex items-center gap-2">
+                  <a
+                    href="#search"
+                    className="btn-secondary flex items-center gap-2"
+                  >
                     <Search size={18} />
-                    Search by ID
+                    Search by ID or name
                   </a>
                 </div>
               </div>
@@ -120,19 +117,20 @@ export default function HomePage() {
                   <Camera onCapture={handleCapture} loading={searching} />
                   {message && (
                     <div
-                      className="mt-4 px-4 py-3 rounded-xl"
+                      className="mt-4 px-4 py-3 rounded-xl flex flex-col items-center gap-3"
                       style={{
                         backgroundColor: 'var(--accent-light)',
                         color: 'var(--accent)',
                       }}
                     >
-                      <p className="text-sm text-center">{message}</p>
                       {searching && (
-                        <ScanProgressBar
-                          value={scanProgress}
-                          label="Scan progress"
+                        <Loader2
+                          className="animate-spin motion-reduce:animate-none shrink-0"
+                          size={24}
+                          aria-hidden
                         />
                       )}
+                      <p className="text-sm text-center">{message}</p>
                     </div>
                   )}
                 </div>
@@ -178,28 +176,34 @@ export default function HomePage() {
                 className="text-2xl md:text-3xl font-bold mb-3"
                 style={{ color: 'var(--text-primary)' }}
               >
-                Search by Product ID
+                Search by product ID or name
               </h2>
               <p style={{ color: 'var(--text-secondary)' }}>
-                Enter the unique product ID to find exactly what you need
+                Enter a MongoDB product ID (24 hex characters) or part of the
+                product name
               </p>
             </div>
-            <form onSubmit={handleIdSearch} className="flex flex-col sm:flex-row gap-3">
+            <form
+              onSubmit={handleIdSearch}
+              className="flex flex-col sm:flex-row gap-3"
+            >
               <input
                 type="text"
                 value={searchId}
                 onChange={(e) => setSearchId(e.target.value)}
-                placeholder="e.g. PRD-00001"
+                placeholder="Product ID or name"
                 className="input-field flex-1"
               />
-              <button type="submit" className="btn-primary flex items-center justify-center gap-2 shrink-0">
+              <button
+                type="submit"
+                className="btn-primary flex items-center justify-center gap-2 shrink-0"
+              >
                 <Search size={18} />
                 Search
               </button>
             </form>
           </div>
         </section>
-
       </main>
       <Footer />
     </>

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Camera as CameraIcon, RotateCcw, Loader2 } from 'lucide-react';
+import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
 
 interface CameraProps {
   onCapture: (imageDataUrl: string) => void;
@@ -15,6 +16,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
   const [captured, setCaptured] = useState<string>('');
+  const [compressing, setCompressing] = useState(false);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -62,7 +64,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
     };
   }, [stream, captured, error]);
 
-  const captureImage = () => {
+  const captureImage = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -71,15 +73,26 @@ export function Camera({ onCapture, loading }: CameraProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    setCaptured(dataUrl);
-    stopStream();
-    onCapture(dataUrl);
+    const raw = canvas.toDataURL('image/jpeg', 0.85);
+    setCompressing(true);
+    try {
+      const compressed = await compressImageDataUrl(raw);
+      setCaptured(compressed);
+      stopStream();
+      onCapture(compressed);
+    } catch {
+      setError('Could not process the image. Try again.');
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const retake = () => {
+    setCaptured('');
     void startCamera();
   };
+
+  const busy = loading || compressing;
 
   return (
     <div className="w-full min-w-0">
@@ -103,7 +116,10 @@ export function Camera({ onCapture, loading }: CameraProps) {
             >
               {error}
             </p>
-            <button onClick={() => void startCamera()} className="btn-primary text-sm !px-4 !py-2">
+            <button
+              onClick={() => void startCamera()}
+              className="btn-primary text-sm !px-4 !py-2"
+            >
               Try Again
             </button>
           </div>
@@ -123,7 +139,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
           />
         )}
 
-        {loading && (
+        {busy && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <Loader2
               size={40}
@@ -139,7 +155,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
         {captured ? (
           <button
             onClick={retake}
-            disabled={loading}
+            disabled={busy}
             className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
           >
             <RotateCcw size={16} />
@@ -147,8 +163,8 @@ export function Camera({ onCapture, loading }: CameraProps) {
           </button>
         ) : (
           <button
-            onClick={captureImage}
-            disabled={!!error || loading || !stream}
+            onClick={() => void captureImage()}
+            disabled={!!error || busy || !stream}
             className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
           >
             <CameraIcon size={16} />
