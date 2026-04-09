@@ -2,9 +2,9 @@ import mongoose from 'mongoose';
 
 const MONGODB_URI = process.env.MONGODB_URI!;
 
-/** Overrides the DB segment of the URI (e.g. use easybusiness instead of test). */
+/** Overrides the DB segment of the URI (must match Atlas database name). */
 export const MONGODB_DB_NAME =
-  process.env.MONGODB_DB_NAME?.trim() || 'easybusiness';
+  process.env.MONGODB_DB_NAME?.trim() || 'easy_business';
 
 interface MongooseCache {
   conn: typeof mongoose | null;
