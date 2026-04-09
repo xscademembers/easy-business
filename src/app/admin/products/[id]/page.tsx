@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense, useEffect, useState, useRef } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import {
   Save,
   Loader2,
@@ -18,16 +18,10 @@ import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
 
-function EditProductPageInner() {
+export default function EditProductPage() {
   const { id } = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const idStr = String(id);
-  const fromAddRestock = searchParams.get('restock') === '1';
-
-  const [addStockQty, setAddStockQty] = useState('1');
-  const [restockBusy, setRestockBusy] = useState(false);
-  const [restockSuccessMsg, setRestockSuccessMsg] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,45 +66,6 @@ function EditProductPageInner() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [idStr]);
-
-  useEffect(() => {
-    if (fromAddRestock) setRestockSuccessMsg(null);
-  }, [fromAddRestock]);
-
-  const applyAddStock = async () => {
-    const delta = parseInt(addStockQty, 10);
-    if (Number.isNaN(delta) || delta <= 0) {
-      setError('Enter a positive number of units to add');
-      return;
-    }
-    setRestockBusy(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/products/${idStr}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantityDelta: delta }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(typeof data.error === 'string' ? data.error : 'Failed to add stock');
-      }
-      if (typeof data.quantity !== 'number') {
-        throw new Error('Could not read updated stock from server');
-      }
-      const nextQty = data.quantity;
-      setForm((f) => ({ ...f, quantity: String(nextQty) }));
-      setRestockSuccessMsg(
-        `Added ${delta} unit${delta === 1 ? '' : 's'}. Total stock is now ${nextQty}.`
-      );
-      setAddStockQty('1');
-      router.replace(`/admin/products/${idStr}`, { scroll: false });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add stock');
-    } finally {
-      setRestockBusy(false);
-    }
-  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -310,80 +265,6 @@ function EditProductPageInner() {
       >
         Edit product
       </h1>
-
-      {(fromAddRestock || restockSuccessMsg) && (
-        <div
-          className="card space-y-4"
-          style={{
-            border: '2px solid var(--accent)',
-            backgroundColor: 'var(--accent-light)',
-          }}
-          role="region"
-          aria-label="Add stock"
-        >
-          {restockSuccessMsg ? (
-            <>
-              <p
-                className="font-medium"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                {restockSuccessMsg}
-              </p>
-              <button
-                type="button"
-                className="btn-secondary text-sm !py-2"
-                onClick={() => setRestockSuccessMsg(null)}
-              >
-                Dismiss
-              </button>
-            </>
-          ) : (
-            <>
-              <h2
-                className="text-lg font-bold"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Add stock
-              </h2>
-              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                Current recorded stock:{' '}
-                <span className="font-semibold tabular-nums">{form.quantity}</span>{' '}
-                units. Enter how many to add — they will be added to this total.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
-                <div className="flex-1">
-                  <label
-                    className="block text-sm font-medium mb-1.5"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    Units to add
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    className="input-field"
-                    value={addStockQty}
-                    onChange={(e) => setAddStockQty(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  className="btn-primary min-h-[48px] shrink-0"
-                  disabled={restockBusy}
-                  onClick={() => void applyAddStock()}
-                >
-                  {restockBusy ? (
-                    <Loader2 size={18} className="animate-spin motion-reduce:animate-none inline" />
-                  ) : (
-                    'Add to stock'
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="card space-y-4">
@@ -677,23 +558,5 @@ function EditProductPageInner() {
         </button>
       </form>
     </div>
-  );
-}
-
-export default function EditProductPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex justify-center py-24">
-          <Loader2
-            size={40}
-            className="animate-spin motion-reduce:animate-none"
-            style={{ color: 'var(--accent)' }}
-          />
-        </div>
-      }
-    >
-      <EditProductPageInner />
-    </Suspense>
   );
 }

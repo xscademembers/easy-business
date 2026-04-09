@@ -396,7 +396,7 @@ export default function AddProductPage() {
     const dup = similarMeta?.duplicateCandidate;
     if (!dup?._id) return;
     setError('');
-    router.push(`/admin/products/${dup._id}?restock=1`);
+    router.push(`/admin/products/${dup._id}`);
   };
 
   const onDuplicateMatchNo = () => {
@@ -517,8 +517,8 @@ export default function AddProductPage() {
                     {similarMeta.duplicateCandidate.name}
                   </p>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    If yes, you&apos;ll open this product to add stock (added to
-                    your current quantity). If no, continue below as a new
+                    If yes, we&apos;ll open this product. Update the quantity
+                    below to add new stock. If no, continue below as a new
                     product.
                   </p>
                 </div>

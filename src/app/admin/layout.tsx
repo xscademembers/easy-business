@@ -42,7 +42,9 @@ export default function AdminLayout({
             >
               {pathname === '/admin'
                 ? 'Dashboard'
-                : pathname.split('/').pop()?.replace(/-/g, ' ') || 'Admin'}
+                : pathname.startsWith('/admin/products/')
+                  ? 'Edit product'
+                  : pathname.split('/').pop()?.replace(/-/g, ' ') || 'Admin'}
             </h2>
           </div>
           <ThemeToggle />
