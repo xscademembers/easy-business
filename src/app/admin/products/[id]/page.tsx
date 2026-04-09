@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState, useRef } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Save,
   Loader2,
@@ -18,10 +18,16 @@ import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
 
-export default function EditProductPage() {
+function EditProductPageInner() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const idStr = String(id);
+  const restockMode = searchParams.get('restock') === '1';
+
+  const [addStockQty, setAddStockQty] = useState('1');
+  const [restockBusy, setRestockBusy] = useState(false);
+  const [restockSuccessMsg, setRestockSuccessMsg] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +72,42 @@ export default function EditProductPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [idStr]);
+
+  const applyAddStock = async () => {
+    const delta = parseInt(addStockQty, 10);
+    if (Number.isNaN(delta) || delta <= 0) {
+      setError('Enter a positive number of units to add');
+      return;
+    }
+    setRestockBusy(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/products/${idStr}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantityDelta: delta }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === 'string' ? data.error : 'Failed to add stock'
+        );
+      }
+      if (typeof (data as { quantity?: unknown }).quantity !== 'number') {
+        throw new Error('Could not read updated stock from server');
+      }
+      const nextQty = (data as { quantity: number }).quantity;
+      setForm((f) => ({ ...f, quantity: String(nextQty) }));
+      setRestockSuccessMsg(
+        `Added ${delta} unit${delta === 1 ? '' : 's'}. Total stock is now ${nextQty}.`
+      );
+      setAddStockQty('1');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to add stock');
+    } finally {
+      setRestockBusy(false);
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -263,8 +305,86 @@ export default function EditProductPage() {
         className="text-2xl font-bold"
         style={{ color: 'var(--text-primary)' }}
       >
-        Edit product
+        {restockMode ? 'Restock product' : 'Edit product'}
       </h1>
+
+      {restockMode && (
+        <div
+          className="card space-y-4"
+          style={{
+            border: '2px solid var(--accent)',
+            backgroundColor: 'var(--accent-light)',
+          }}
+          role="region"
+          aria-label="Add stock"
+        >
+          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+            Add stock
+          </h2>
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+            Product: <span className="font-semibold">{form.name || '—'}</span>
+            <br />
+            Current stock:{' '}
+            <span className="font-semibold tabular-nums">{form.quantity}</span>
+          </p>
+
+          {restockSuccessMsg ? (
+            <p className="text-sm font-medium" style={{ color: 'var(--success)' }}>
+              {restockSuccessMsg}
+            </p>
+          ) : null}
+
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+            <div className="flex-1">
+              <label
+                className="block text-sm font-medium mb-1.5"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Units to add
+              </label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="input-field"
+                value={addStockQty}
+                onChange={(e) => setAddStockQty(e.target.value)}
+              />
+            </div>
+            <button
+              type="button"
+              className="btn-primary min-h-[48px] shrink-0"
+              disabled={restockBusy}
+              onClick={() => void applyAddStock()}
+            >
+              {restockBusy ? (
+                <Loader2
+                  size={18}
+                  className="animate-spin motion-reduce:animate-none inline"
+                />
+              ) : (
+                'Add to stock'
+              )}
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Link
+              href="/admin/products"
+              className="btn-secondary flex-1 text-sm !py-2 text-center"
+            >
+              Done
+            </Link>
+            <button
+              type="button"
+              className="btn-secondary flex-1 text-sm !py-2"
+              onClick={() => router.replace(`/admin/products/${idStr}`)}
+            >
+              Switch to full edit
+            </button>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="card space-y-4">
@@ -317,6 +437,7 @@ export default function EditProductPage() {
                 type="button"
                 onClick={() => void captureImage()}
                 className="btn-primary flex items-center gap-2 text-sm"
+                disabled={restockMode}
               >
                 <CameraIcon size={16} /> Capture
               </button>
@@ -326,6 +447,7 @@ export default function EditProductPage() {
                   type="button"
                   onClick={() => void replaceWithCamera()}
                   className="btn-primary flex items-center gap-2 text-sm"
+                  disabled={restockMode}
                 >
                   <CameraIcon size={16} /> New photo from camera
                 </button>
@@ -333,6 +455,7 @@ export default function EditProductPage() {
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="btn-secondary flex items-center gap-2 text-sm"
+                  disabled={restockMode}
                 >
                   <ImagePlus size={16} />
                   From gallery
@@ -363,7 +486,7 @@ export default function EditProductPage() {
                   type="button"
                   className="btn-secondary text-xs !py-1.5 !px-2 inline-flex items-center gap-1"
                   onClick={() => void spellcheck('name')}
-                  disabled={spellField === 'name'}
+                  disabled={restockMode || spellField === 'name'}
                 >
                   {spellField === 'name' ? (
                     <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
@@ -378,6 +501,7 @@ export default function EditProductPage() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="input-field"
+                disabled={restockMode}
               />
             </div>
 
@@ -404,7 +528,7 @@ export default function EditProductPage() {
                   type="button"
                   className="btn-secondary text-xs !py-1.5 !px-2 inline-flex items-center gap-1"
                   onClick={() => void spellcheck('description')}
-                  disabled={spellField === 'description'}
+                  disabled={restockMode || spellField === 'description'}
                 >
                   {spellField === 'description' ? (
                     <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
@@ -417,7 +541,7 @@ export default function EditProductPage() {
                   type="button"
                   className="btn-secondary text-xs !py-1.5 !px-2 inline-flex items-center gap-1"
                   onClick={() => void generateDescription()}
-                  disabled={genLoading}
+                  disabled={restockMode || genLoading}
                 >
                   {genLoading ? (
                     <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
@@ -434,6 +558,7 @@ export default function EditProductPage() {
                 }
                 className="input-field min-h-[96px] resize-y"
                 rows={4}
+                disabled={restockMode}
               />
             </div>
 
@@ -452,6 +577,7 @@ export default function EditProductPage() {
                 value={form.price}
                 onChange={(e) => setForm({ ...form, price: e.target.value })}
                 className="input-field"
+                disabled={restockMode}
               />
             </div>
             <div>
@@ -468,6 +594,7 @@ export default function EditProductPage() {
                 value={form.quantity}
                 onChange={(e) => setForm({ ...form, quantity: e.target.value })}
                 className="input-field"
+                disabled={restockMode}
               />
             </div>
 
@@ -482,6 +609,7 @@ export default function EditProductPage() {
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
                 className="input-field"
+                disabled={restockMode}
               >
                 <option value="general">General</option>
                 <option value="clothing">Clothing</option>
@@ -525,6 +653,7 @@ export default function EditProductPage() {
                   value={form.sizes}
                   onChange={(e) => setForm({ ...form, sizes: e.target.value })}
                   className="input-field"
+                  disabled={restockMode}
                 />
               </div>
             )}
@@ -544,19 +673,42 @@ export default function EditProductPage() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="btn-primary flex items-center gap-2 disabled:opacity-60"
-        >
-          {saving ? (
-            <Loader2 size={18} className="animate-spin motion-reduce:animate-none" />
-          ) : (
-            <Save size={18} />
-          )}
-          {saving ? 'Saving…' : 'Save changes'}
-        </button>
+        {!restockMode && (
+          <button
+            type="submit"
+            disabled={saving}
+            className="btn-primary flex items-center gap-2 disabled:opacity-60"
+          >
+            {saving ? (
+              <Loader2
+                size={18}
+                className="animate-spin motion-reduce:animate-none"
+              />
+            ) : (
+              <Save size={18} />
+            )}
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        )}
       </form>
     </div>
+  );
+}
+
+export default function EditProductPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-24">
+          <Loader2
+            size={40}
+            className="animate-spin motion-reduce:animate-none"
+            style={{ color: 'var(--accent)' }}
+          />
+        </div>
+      }
+    >
+      <EditProductPageInner />
+    </Suspense>
   );
 }

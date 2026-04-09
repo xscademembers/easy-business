@@ -396,7 +396,7 @@ export default function AddProductPage() {
     const dup = similarMeta?.duplicateCandidate;
     if (!dup?._id) return;
     setError('');
-    router.push(`/admin/products/${dup._id}`);
+    router.push(`/admin/products/${dup._id}?restock=1`);
   };
 
   const onDuplicateMatchNo = () => {
