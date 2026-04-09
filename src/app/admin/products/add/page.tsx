@@ -49,8 +49,9 @@ export default function AddProductPage() {
   const [error, setError] = useState('');
   const [similarMeta, setSimilarMeta] = useState<SimilarMeta | null>(null);
   const [checkingSimilar, setCheckingSimilar] = useState(false);
-  const [dupModal, setDupModal] = useState(false);
   const [codeModal, setCodeModal] = useState(false);
+  /** User clicked "No" on inline same-product prompt — allow creating a new product. */
+  const [userChoseNewProduct, setUserChoseNewProduct] = useState(false);
   const [restockQty, setRestockQty] = useState('1');
   const [genLoading, setGenLoading] = useState(false);
   const [spellField, setSpellField] = useState<'name' | 'description' | null>(
@@ -62,6 +63,7 @@ export default function AddProductPage() {
 
   useEffect(() => {
     setSkipDuplicateGuard(false);
+    setUserChoseNewProduct(false);
   }, [image]);
 
   useEffect(() => {
@@ -138,6 +140,7 @@ export default function AddProductPage() {
     setSimilarMeta(null);
     setIgnoreCodeMatch(false);
     setSkipDuplicateGuard(false);
+    setUserChoseNewProduct(false);
     void startCamera();
   };
 
@@ -281,37 +284,6 @@ export default function AddProductPage() {
     }
   };
 
-  const updateExistingFromDuplicate = async (id: string) => {
-    if (!image) return;
-    setSaving(true);
-    setError('');
-    try {
-      const res = await fetch(`/api/products/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          description: form.description.trim(),
-          price: parseFloat(form.price),
-          quantity: parseInt(form.quantity, 10) || 0,
-          category: form.category.trim() || 'general',
-          sizes: sizesArray,
-          imageBase64: image,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to update');
-      }
-      setDupModal(false);
-      router.push('/admin/products');
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to update');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const applyRestock = async () => {
     const id = similarMeta?.codeMatch?.product?._id;
     if (!id) return;
@@ -357,6 +329,17 @@ export default function AddProductPage() {
       return;
     }
 
+    if (
+      similarMeta?.duplicateCandidate &&
+      !userChoseNewProduct &&
+      !opts?.fromIgnoredCode
+    ) {
+      setError(
+        'Please choose Yes or No under your photo: is this the same catalog product?'
+      );
+      return;
+    }
+
     setCheckingSimilar(true);
     setError('');
     try {
@@ -377,10 +360,13 @@ export default function AddProductPage() {
         duplicateCandidate: data.duplicateCandidate ?? null,
         codeMatch: data.codeMatch ?? similarMeta?.codeMatch ?? null,
       });
-      if (data.duplicateCandidate) {
-        setDupModal(true);
+      if (
+        data.duplicateCandidate &&
+        !userChoseNewProduct &&
+        !opts?.fromIgnoredCode
+      ) {
         setError(
-          'This photo matches an existing catalog item. Choose Update existing or Add new — or change the photo.'
+          'This photo matches an existing item. Use Yes or No under your photo, or change the image.'
         );
         return;
       }
@@ -406,12 +392,24 @@ export default function AddProductPage() {
     await ensureDuplicateResolvedThenCreate();
   };
 
-  const proceedAddNewDespiteDuplicate = async () => {
-    setDupModal(false);
+  const onDuplicateMatchYes = () => {
+    const dup = similarMeta?.duplicateCandidate;
+    if (!dup?._id) return;
     setError('');
-    setSkipDuplicateGuard(true);
-    await createProduct();
+    router.push(`/admin/products/${dup._id}?restock=1`);
   };
+
+  const onDuplicateMatchNo = () => {
+    setUserChoseNewProduct(true);
+    setSkipDuplicateGuard(true);
+    setError('');
+  };
+
+  const showInlineDuplicatePrompt =
+    Boolean(image) &&
+    Boolean(similarMeta?.duplicateCandidate) &&
+    !checkingSimilar &&
+    !userChoseNewProduct;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -475,6 +473,75 @@ export default function AddProductPage() {
               </div>
             )}
           </div>
+
+          {showInlineDuplicatePrompt && similarMeta?.duplicateCandidate && (
+            <div
+              className="rounded-xl p-4 space-y-4 border-2"
+              style={{
+                borderColor: 'var(--accent)',
+                backgroundColor: 'var(--accent-light)',
+              }}
+              role="region"
+              aria-label="Similar product found"
+            >
+              <p
+                className="font-semibold text-sm sm:text-base"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                Is this the product you&apos;re referring to?
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                {similarMeta.duplicateCandidate.image_url ? (
+                  <img
+                    src={similarMeta.duplicateCandidate.image_url}
+                    alt=""
+                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-cover shrink-0 border"
+                    style={{ borderColor: 'var(--border)' }}
+                  />
+                ) : (
+                  <div
+                    className="w-24 h-24 rounded-xl shrink-0 flex items-center justify-center text-xs"
+                    style={{
+                      backgroundColor: 'var(--bg-tertiary)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    No image
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p
+                    className="font-bold text-lg"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
+                    {similarMeta.duplicateCandidate.name}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    If yes, you&apos;ll open this product to add stock (added to
+                    your current quantity). If no, continue below as a new
+                    product.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  className="btn-primary flex-1 min-h-[48px]"
+                  onClick={onDuplicateMatchYes}
+                >
+                  Yes — same product
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary flex-1 min-h-[48px]"
+                  onClick={onDuplicateMatchNo}
+                >
+                  No — new product
+                </button>
+              </div>
+            </div>
+          )}
+
           <canvas ref={canvasRef} className="hidden" />
           <input
             ref={fileInputRef}
@@ -719,7 +786,12 @@ export default function AddProductPage() {
 
         <button
           type="submit"
-          disabled={saving || checkingSimilar || !image}
+          disabled={
+            saving ||
+            checkingSimilar ||
+            !image ||
+            (Boolean(similarMeta?.duplicateCandidate) && !userChoseNewProduct)
+          }
           className="btn-primary flex items-center gap-2 disabled:opacity-60"
         >
           {saving ? (
@@ -730,80 +802,6 @@ export default function AddProductPage() {
           {saving ? 'Saving…' : 'Save product'}
         </button>
       </form>
-
-      {dupModal && similarMeta?.duplicateCandidate && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="dup-title"
-        >
-          <div
-            className="card max-w-md w-full space-y-4 p-6"
-            style={{ backgroundColor: 'var(--bg-secondary)' }}
-          >
-            <h2 id="dup-title" className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-              This looks like an existing product
-            </h2>
-            <div className="flex gap-3 items-center">
-              {similarMeta.duplicateCandidate.image_url && (
-                <img
-                  src={similarMeta.duplicateCandidate.image_url}
-                  alt=""
-                  className="w-20 h-20 rounded-lg object-cover shrink-0"
-                />
-              )}
-              <div>
-                <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                  {similarMeta.duplicateCandidate.name}
-                </p>
-                {similarMeta.duplicateCandidate.similarityScore != null && (
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    Similarity score:{' '}
-                    {similarMeta.duplicateCandidate.similarityScore.toFixed(3)}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
-                className="btn-primary flex-1"
-                disabled={saving}
-                onClick={() =>
-                  void updateExistingFromDuplicate(
-                    String(similarMeta.duplicateCandidate!._id)
-                  )
-                }
-              >
-                Update existing
-              </button>
-              <button
-                type="button"
-                className="btn-secondary flex-1"
-                disabled={saving}
-                onClick={() => void proceedAddNewDespiteDuplicate()}
-              >
-                Add new
-              </button>
-            </div>
-            <button
-              type="button"
-              className="text-sm w-full"
-              style={{ color: 'var(--text-muted)' }}
-              onClick={() => {
-                setDupModal(false);
-                setError(
-                  'Duplicate not resolved: use Update existing, Add new, or change the product photo before saving.'
-                );
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
 
       {codeModal && similarMeta?.codeMatch && (
         <div
