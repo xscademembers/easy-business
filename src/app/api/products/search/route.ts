@@ -9,8 +9,6 @@ import { selectStrictVectorMatches } from '@/lib/constants/searchScores';
 
 const publicSelect = PRODUCT_PUBLIC_FIELDS;
 
-const SIMILAR_LIMIT = 8;
-
 async function hydrateHitsWithDocs(
   hits: Array<{
     _id: unknown;
@@ -83,7 +81,7 @@ export async function POST(request: Request) {
       }
       const products = await Product.find({ $or: or })
         .select(publicSelect)
-        .limit(20)
+        .limit(12)
         .lean();
       return NextResponse.json({ products, matchType: 'text' });
     }
@@ -93,15 +91,11 @@ export async function POST(request: Request) {
       const embedding = await getImageEmbeddingFromJpegBuffer(buffer);
       const hits = await findNearestProductsByEmbedding(embedding, 24, 250);
 
-      const { matches, orderedRest, meta } = selectStrictVectorMatches(hits);
-
-      const similarHits = orderedRest.slice(0, SIMILAR_LIMIT);
-      const similarProducts = await hydrateHitsWithDocs(similarHits);
+      const { matches, meta } = selectStrictVectorMatches(hits);
 
       if (matches.length === 0) {
         return NextResponse.json({
           products: [],
-          similarProducts,
           matchType: 'none',
           threshold: meta.effectiveFloor,
           vectorMeta: {
@@ -117,7 +111,6 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         products,
-        similarProducts: similarProducts.length ? similarProducts : undefined,
         matchType: 'vector',
         threshold: meta.effectiveFloor,
         vectorMeta: {

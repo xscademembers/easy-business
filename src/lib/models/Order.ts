@@ -23,6 +23,7 @@ const OrderSchema = new mongoose.Schema(
       enum: ['pending', 'completed'],
       default: 'pending',
     },
+    customerMessage: { type: String, default: '', trim: true },
   },
   { timestamps: true }
 );

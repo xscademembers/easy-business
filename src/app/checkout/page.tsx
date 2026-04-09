@@ -9,7 +9,12 @@ import Link from 'next/link';
 
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCart();
-  const [form, setForm] = useState({ name: '', phone: '', email: '' });
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    message: '',
+  });
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -26,7 +31,12 @@ export default function CheckoutPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customer: form,
+          customer: {
+            name: form.name,
+            phone: form.phone,
+            email: form.email,
+          },
+          customerMessage: form.message,
           items: items.map((i) => ({
             productId: i.productId,
             name: i.name,
@@ -184,17 +194,35 @@ export default function CheckoutPage() {
                       className="block text-sm font-medium mb-1.5"
                       style={{ color: 'var(--text-secondary)' }}
                     >
-                      Email
+                      Email <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
                     </label>
                     <input
                       type="email"
-                      required
                       value={form.email}
                       onChange={(e) =>
                         setForm({ ...form, email: e.target.value })
                       }
                       className="input-field"
                       placeholder="john@example.com"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      className="block text-sm font-medium mb-1.5"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      Message <span style={{ color: 'var(--text-muted)' }}>(optional)</span>
+                    </label>
+                    <textarea
+                      value={form.message}
+                      onChange={(e) =>
+                        setForm({ ...form, message: e.target.value })
+                      }
+                      className="input-field min-h-[100px] resize-y"
+                      placeholder="Delivery notes, questions, or special requests…"
+                      maxLength={2000}
+                      rows={4}
                     />
                   </div>
                 </div>

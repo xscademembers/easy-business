@@ -8,28 +8,38 @@
 
 export function getVectorMatchMinScore(): number {
   const raw = process.env.VECTOR_MATCH_MIN_SCORE?.trim();
-  /** Stricter default so random catalog items are not all "matches". */
+  /** Only ~90%+ similarity (normalized) counts as a customer-visible match. */
   if (!raw) return 0.9;
   const n = Number.parseFloat(raw);
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.9;
 }
 
 /**
- * A result must score at least (topScore - margin) to count as a match with the winner.
- * Stops the whole list from qualifying when scores are only slightly below the best.
+ * MongoDB `vectorSearchScore` is usually 0–1 but can be on other scales.
+ * Normalize to 0–1 for threshold checks (e.g. 92 → 0.92).
+ */
+export function normalizeVectorMatchScore(score: number): number {
+  if (!Number.isFinite(score)) return 0;
+  if (score > 1) return Math.min(1, score / 100);
+  return Math.min(1, Math.max(0, score));
+}
+
+/**
+ * A result must score at least (topNorm - margin) as well as the absolute min.
+ * Default margin 0 = only the strongest tier (≥ max(0.9, top)) — avoids listing the whole catalog.
  */
 export function getVectorMatchRelativeMargin(): number {
   const raw = process.env.VECTOR_MATCH_RELATIVE_MARGIN?.trim();
-  if (!raw) return 0.042;
+  if (!raw) return 0;
   const n = Number.parseFloat(raw);
-  return Number.isFinite(n) ? Math.min(0.5, Math.max(0, n)) : 0.042;
+  return Number.isFinite(n) ? Math.min(0.5, Math.max(0, n)) : 0;
 }
 
 export function getVectorMatchMaxResults(): number {
   const raw = process.env.VECTOR_MATCH_MAX_RESULTS?.trim();
-  if (!raw) return 3;
+  if (!raw) return 1;
   const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < 1) return 3;
+  if (!Number.isFinite(n) || n < 1) return 1;
   return Math.min(20, n);
 }
 
@@ -85,11 +95,15 @@ export function selectStrictVectorMatches<T extends { _id: unknown; score: numbe
     };
   }
 
-  const sorted = [...hits].sort((a, b) => b.score - a.score);
-  const topScore = sorted[0]!.score;
-  const effectiveFloor = Math.max(absoluteMin, topScore - relativeMargin);
+  const sorted = [...hits].sort(
+    (a, b) => normalizeVectorMatchScore(b.score) - normalizeVectorMatchScore(a.score)
+  );
+  const topNorm = normalizeVectorMatchScore(sorted[0]!.score);
+  const effectiveFloor = Math.max(absoluteMin, topNorm - relativeMargin);
 
-  const matchCandidates = sorted.filter((h) => h.score >= effectiveFloor);
+  const matchCandidates = sorted.filter(
+    (h) => normalizeVectorMatchScore(h.score) >= effectiveFloor - 1e-9
+  );
   const matches = matchCandidates.slice(0, maxMatches);
 
   const matchIds = new Set(matches.map((m) => String(m._id)));
@@ -99,7 +113,7 @@ export function selectStrictVectorMatches<T extends { _id: unknown; score: numbe
     matches,
     orderedRest,
     meta: {
-      topScore,
+      topScore: topNorm,
       absoluteMin,
       relativeMargin,
       effectiveFloor,

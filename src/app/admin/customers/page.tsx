@@ -7,6 +7,7 @@ type OrderRow = {
   _id: string;
   createdAt: string;
   totalAmount?: number;
+  customerMessage?: string;
   items?: Array<{ name?: string; quantity?: number; price?: number }>;
   customer?: {
     _id?: string;
@@ -49,7 +50,7 @@ export default function CustomersPage() {
     for (const order of orders) {
       const c = order.customer;
       const key =
-        (c && (c.email || String(c._id))) ||
+        (c && (c.phone || c.email || String(c._id))) ||
         `${order._id}-guest`;
       const name = c?.name || 'Unknown';
       const email = c?.email || '—';
@@ -94,7 +95,7 @@ export default function CustomersPage() {
       }
       return (
         c.name.toLowerCase().includes(q) ||
-        c.email.toLowerCase().includes(q) ||
+        (c.email !== '—' && c.email.toLowerCase().includes(q)) ||
         c.phone.toLowerCase().includes(q) ||
         String(c.orderCount).includes(q)
       );
@@ -278,7 +279,10 @@ export default function CustomersPage() {
                       className="text-sm break-all"
                       style={{ color: 'var(--text-muted)' }}
                     >
-                      {order.customer?.email} | {order.customer?.phone}
+                      {order.customer?.phone || '—'}
+                      {order.customer?.email
+                        ? ` · ${order.customer.email}`
+                        : ''}
                     </p>
                   </div>
                 </div>
@@ -310,6 +314,20 @@ export default function CustomersPage() {
                 </div>
               </div>
 
+              {order.customerMessage ? (
+                <p
+                  className="text-sm mb-4 px-4 py-3 rounded-xl"
+                  style={{
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                    Customer note:{' '}
+                  </span>
+                  {order.customerMessage}
+                </p>
+              ) : null}
               <div
                 className="border-t pt-4 space-y-2"
                 style={{ borderColor: 'var(--border)' }}

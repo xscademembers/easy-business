@@ -17,16 +17,9 @@ export type SearchResultProduct = {
 
 interface ImageSearchResultsProps {
   products: SearchResultProduct[];
-  /** Shown when nothing met the similarity threshold */
-  similarProducts?: SearchResultProduct[];
-  threshold?: number;
 }
 
-export function ImageSearchResults({
-  products,
-  similarProducts,
-  threshold,
-}: ImageSearchResultsProps) {
+export function ImageSearchResults({ products }: ImageSearchResultsProps) {
   const { addItem } = useCart();
   const [feedback, setFeedback] = useState<{
     productId: string;
@@ -41,7 +34,7 @@ export function ImageSearchResults({
     };
   }, []);
 
-  const renderCard = (p: SearchResultProduct, opts?: { subtle?: boolean }) => {
+  const renderCard = (p: SearchResultProduct) => {
     const stock = Math.max(0, Math.floor(Number(p.quantity) || 0));
     const inStock = stock > 0;
     const id = String(p._id);
@@ -51,11 +44,6 @@ export function ImageSearchResults({
       <article
         key={id}
         className="card flex flex-col sm:flex-row gap-4 p-4"
-        style={
-          opts?.subtle
-            ? { opacity: 0.95, borderColor: 'var(--border)' }
-            : undefined
-        }
       >
         <div
           className="shrink-0 w-full sm:w-32 h-40 sm:h-32 rounded-xl overflow-hidden"
@@ -81,30 +69,12 @@ export function ImageSearchResults({
             >
               {p.name}
             </h3>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-              {p.productCode ? `Code: ${p.productCode}` : `ID: ${p._id}`}
-              {typeof p.score === 'number' && threshold !== undefined && (
-                <span className="ml-2">
-                  · score{' '}
-                  {p.score <= 1
-                    ? `${(p.score * 100).toFixed(0)}%`
-                    : p.score.toFixed(2)}
-                </span>
-              )}
-            </p>
             <p
               className="text-sm mt-2 font-medium"
               style={{ color: inStock ? 'var(--success)' : 'var(--danger)' }}
               role="status"
             >
-              {inStock ? (
-                <>
-                  In stock: <span className="tabular-nums">{stock}</span>{' '}
-                  available
-                </>
-              ) : (
-                <>Out of stock</>
-              )}
+              {inStock ? <>In stock</> : <>Out of stock</>}
             </p>
           </div>
           <p
@@ -206,7 +176,7 @@ export function ImageSearchResults({
     );
   };
 
-  if (products.length === 0 && (!similarProducts || similarProducts.length === 0)) {
+  if (products.length === 0) {
     return null;
   }
 
@@ -215,48 +185,15 @@ export function ImageSearchResults({
       className="mt-8 space-y-6 w-full max-w-2xl mx-auto"
       aria-label="Search results"
     >
-      {products.length === 0 ? (
-        <div
-          className="rounded-2xl px-4 py-4 text-center"
-          style={{
-            backgroundColor: 'var(--accent-light)',
-            color: 'var(--accent)',
-          }}
+      <div className="space-y-4">
+        <h2
+          className="text-lg font-semibold"
+          style={{ color: 'var(--text-primary)' }}
         >
-          <p className="font-medium">No matching product found</p>
-          {threshold !== undefined && (
-            <p className="text-sm mt-2 opacity-90">
-              Similarity was below the confidence threshold.
-            </p>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <h2
-            className="text-lg font-semibold"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            {products.length === 1 ? 'Match' : 'Matches'}
-          </h2>
-          {products.map((p) => renderCard(p))}
-        </div>
-      )}
-
-      {similarProducts && similarProducts.length > 0 && (
-        <div className="space-y-4 pt-2">
-          <h2
-            className="text-base font-semibold"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Similar products
-          </h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            These are the closest catalog items but did not meet the match
-            threshold.
-          </p>
-          {similarProducts.map((p) => renderCard(p, { subtle: true }))}
-        </div>
-      )}
+          {products.length === 1 ? 'Match' : 'Matches'}
+        </h2>
+        {products.map((p) => renderCard(p))}
+      </div>
     </section>
   );
 }

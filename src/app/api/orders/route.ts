@@ -19,19 +19,43 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     await connectDB();
-    const { customer: customerData, items } = await request.json();
+    const { customer: customerData, items, customerMessage } = await request.json();
 
-    if (!customerData?.name || !customerData?.phone || !customerData?.email) {
-      return NextResponse.json({ error: 'Customer details required' }, { status: 400 });
+    const name = typeof customerData?.name === 'string' ? customerData.name.trim() : '';
+    const phone = typeof customerData?.phone === 'string' ? customerData.phone.trim() : '';
+    if (!name || !phone) {
+      return NextResponse.json(
+        { error: 'Name and phone number are required' },
+        { status: 400 }
+      );
     }
     if (!items?.length) {
       return NextResponse.json({ error: 'Cart is empty' }, { status: 400 });
     }
 
-    let customer = await Customer.findOne({ email: customerData.email });
-    if (!customer) {
-      customer = await Customer.create(customerData);
+    const email =
+      typeof customerData?.email === 'string' ? customerData.email.trim() : '';
+
+    let customer = await Customer.findOne({ phone });
+    if (!customer && email) {
+      customer = await Customer.findOne({ email });
     }
+    if (!customer) {
+      customer = await Customer.create({
+        name,
+        phone,
+        email,
+      });
+    } else {
+      customer.name = name;
+      if (email) customer.email = email;
+      await customer.save();
+    }
+
+    const message =
+      typeof customerMessage === 'string'
+        ? customerMessage.trim().slice(0, 2000)
+        : '';
 
     const totalAmount = items.reduce(
       (sum: number, item: { price: number; quantity: number }) =>
@@ -45,6 +69,7 @@ export async function POST(request: Request) {
       totalAmount,
       paymentType: 'offline',
       paymentStatus: 'pending',
+      customerMessage: message,
     });
 
     customer.orders.push(order._id);

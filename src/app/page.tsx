@@ -20,10 +20,7 @@ export default function HomePage() {
   const [searching, setSearching] = useState(false);
   const [message, setMessage] = useState('');
   const [products, setProducts] = useState<SearchResultProduct[]>([]);
-  const [similarProducts, setSimilarProducts] = useState<
-    SearchResultProduct[] | undefined
-  >(undefined);
-  const [threshold, setThreshold] = useState<number | undefined>(undefined);
+  const [imageSearchCompleted, setImageSearchCompleted] = useState(false);
 
   const [idInput, setIdInput] = useState('');
 
@@ -31,8 +28,7 @@ export default function HomePage() {
     setSearching(true);
     setMessage('Finding your product…');
     setProducts([]);
-    setSimilarProducts(undefined);
-    setThreshold(undefined);
+    setImageSearchCompleted(false);
     try {
       const res = await fetch('/api/products/search', {
         method: 'POST',
@@ -43,21 +39,17 @@ export default function HomePage() {
       if (!res.ok) {
         throw new Error(data.error || 'Search failed');
       }
-      setThreshold(
-        typeof data.threshold === 'number' ? data.threshold : undefined
-      );
       const list = (data.products || []) as SearchResultProduct[];
       setProducts(list);
-      setSimilarProducts(data.similarProducts as SearchResultProduct[] | undefined);
       setMessage('');
     } catch (e) {
       setMessage(
         e instanceof Error ? e.message : 'Search failed. Please try again.'
       );
       setProducts([]);
-      setSimilarProducts(undefined);
     } finally {
       setSearching(false);
+      setImageSearchCompleted(true);
     }
   }, []);
 
@@ -68,8 +60,6 @@ export default function HomePage() {
     setSearching(true);
     setMessage('');
     setProducts([]);
-    setSimilarProducts(undefined);
-    setThreshold(undefined);
     try {
       const body =
         /^[0-9a-fA-F]{24}$/.test(q) || /^\d{5,7}$/.test(q)
@@ -101,8 +91,7 @@ export default function HomePage() {
     setMode('pick');
     setMessage('');
     setProducts([]);
-    setSimilarProducts(undefined);
-    setThreshold(undefined);
+    setImageSearchCompleted(false);
     setIdInput('');
   };
 
@@ -133,7 +122,12 @@ export default function HomePage() {
             <button
               type="button"
               className="btn-primary w-full min-h-[56px] text-base flex items-center justify-center gap-3 rounded-2xl motion-safe:animate-fade-up-delay-1"
-              onClick={() => setMode('image')}
+              onClick={() => {
+                setMode('image');
+                setProducts([]);
+                setMessage('');
+                setImageSearchCompleted(false);
+              }}
             >
               <CameraIcon size={22} aria-hidden />
               Search by Image
@@ -141,7 +135,11 @@ export default function HomePage() {
             <button
               type="button"
               className="btn-secondary w-full min-h-[56px] text-base flex items-center justify-center gap-3 rounded-2xl motion-safe:animate-fade-up-delay-2"
-              onClick={() => setMode('id')}
+              onClick={() => {
+                setMode('id');
+                setProducts([]);
+                setMessage('');
+              }}
             >
               <Hash size={22} aria-hidden />
               Search by Product ID
@@ -187,11 +185,25 @@ export default function HomePage() {
               <p className="text-sm text-center">{message}</p>
             </div>
           )}
-          <ImageSearchResults
-            products={products}
-            similarProducts={similarProducts}
-            threshold={threshold}
-          />
+          {imageSearchCompleted &&
+            !searching &&
+            !message &&
+            products.length === 0 && (
+              <div
+                className="glass-panel-strong rounded-2xl px-4 py-5 text-center border"
+                style={{
+                  borderColor: 'var(--glass-border-subtle)',
+                  color: 'var(--accent)',
+                }}
+                role="status"
+              >
+                <p className="font-medium">No matching product found</p>
+                <p className="text-sm mt-2 opacity-90" style={{ color: 'var(--text-secondary)' }}>
+                  Try another angle, better lighting, or search by name or code.
+                </p>
+              </div>
+            )}
+          <ImageSearchResults products={products} />
         </div>
       )}
 
@@ -216,7 +228,7 @@ export default function HomePage() {
               className="block text-sm font-medium"
               style={{ color: 'var(--text-secondary)' }}
             >
-              Product ID (5–7 digit code or catalog ID) or name
+              Product name or 5–7 digit code
             </label>
             <input
               id="product-id-search"

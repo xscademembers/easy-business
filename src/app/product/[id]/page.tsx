@@ -191,24 +191,6 @@ export default function ProductPage() {
                     <tr style={{ borderBottom: '1px solid var(--border)' }}>
                       <th
                         scope="row"
-                        className="text-left py-3 px-4 font-medium w-[40%]"
-                        style={{
-                          backgroundColor: 'var(--bg-tertiary)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        Product code
-                      </th>
-                      <td
-                        className="py-3 px-4 tabular-nums font-semibold tracking-wide text-base"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        {product.productCode || '—'}
-                      </td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <th
-                        scope="row"
                         className="text-left py-3 px-4 font-medium"
                         style={{
                           backgroundColor: 'var(--bg-tertiary)',
@@ -222,32 +204,6 @@ export default function ProductPage() {
                         style={{ color: 'var(--accent)' }}
                       >
                         ${product.price.toFixed(2)}
-                      </td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                      <th
-                        scope="row"
-                        className="text-left py-3 px-4 font-medium"
-                        style={{
-                          backgroundColor: 'var(--bg-tertiary)',
-                          color: 'var(--text-secondary)',
-                        }}
-                      >
-                        Availability
-                      </th>
-                      <td className="py-3 px-4" style={{ color: 'var(--text-primary)' }}>
-                        {inStock ? (
-                          <span className="tabular-nums font-medium">
-                            {stock} in stock
-                          </span>
-                        ) : (
-                          <span
-                            className="font-semibold"
-                            style={{ color: 'var(--danger)' }}
-                          >
-                            Out of stock
-                          </span>
-                        )}
                       </td>
                     </tr>
                     {product.category ? (
@@ -407,13 +363,6 @@ export default function ProductPage() {
                 style={{ color: 'var(--bg-primary)' }}
               >
                 {product.name}
-                {product.productCode ? (
-                  <>
-                    {' '}
-                    ·{' '}
-                    <span className="tabular-nums">{product.productCode}</span>
-                  </>
-                ) : null}
               </p>
               <button
                 type="button"
