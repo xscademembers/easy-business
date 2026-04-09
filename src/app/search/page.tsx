@@ -13,6 +13,7 @@ function SearchContent() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (query) {
@@ -24,11 +25,20 @@ function SearchContent() {
 
   const fetchAll = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch('/api/products?limit=50');
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFetchError(
+          typeof data.error === 'string' ? data.error : 'Could not load products'
+        );
+        setResults([]);
+        return;
+      }
       setResults(data.products || []);
     } catch {
+      setFetchError('Could not load products');
       setResults([]);
     } finally {
       setLoading(false);
@@ -38,6 +48,7 @@ function SearchContent() {
 
   const doSearch = async (q: string) => {
     setLoading(true);
+    setFetchError(null);
     try {
       const trimmed = q.trim();
       const body =
@@ -49,9 +60,17 @@ function SearchContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setFetchError(
+          typeof data.error === 'string' ? data.error : 'Search failed'
+        );
+        setResults([]);
+        return;
+      }
       setResults(data.products || []);
     } catch {
+      setFetchError('Search failed');
       setResults([]);
     } finally {
       setLoading(false);
@@ -77,6 +96,18 @@ function SearchContent() {
               ? 'Searching...'
               : `${results.length} product${results.length !== 1 ? 's' : ''} found`}
           </p>
+          {fetchError ? (
+            <p
+              className="mt-3 text-sm rounded-lg px-4 py-3"
+              style={{
+                color: 'var(--danger)',
+                backgroundColor: 'color-mix(in srgb, var(--danger) 12%, transparent)',
+              }}
+              role="alert"
+            >
+              {fetchError}
+            </p>
+          ) : null}
         </div>
       </section>
 

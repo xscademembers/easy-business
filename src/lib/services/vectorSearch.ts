@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 import Product from '@/lib/models/Product';
+import { MONGODB_DB_NAME } from '@/lib/mongodb';
 import {
   EMBEDDING_DIMENSION,
   VECTOR_INDEX_NAME,
@@ -49,7 +50,15 @@ export async function findNearestProductsByEmbedding(
     },
   ];
 
-  const results = await Product.collection.aggregate(pipeline).toArray();
+  let results: Record<string, unknown>[];
+  try {
+    results = await Product.collection.aggregate(pipeline).toArray();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `${msg} — Create an Atlas Vector Search index named "${VECTOR_INDEX_NAME}" on ${MONGODB_DB_NAME}.products (field "embedding", 512 dimensions). If you use a different database, set MONGODB_DB_NAME and recreate the index there.`
+    );
+  }
 
   return results.map((doc) => ({
     _id: doc._id as Types.ObjectId,
