@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Package,
-  BarChart3,
   Users,
   LogOut,
   ChevronLeft,
@@ -19,7 +18,6 @@ import { useState, useEffect } from 'react';
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/products', label: 'Products', icon: Package },
-  { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/customers', label: 'Customers', icon: Users },
 ];
 

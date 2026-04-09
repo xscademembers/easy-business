@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
 import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
+import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
 
 type SimilarMeta = {
@@ -82,13 +83,7 @@ export default function AddProductPage() {
   const startCamera = async () => {
     try {
       setError('');
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 720 },
-          height: { ideal: 1280 },
-        },
-      });
+      const mediaStream = await getPortraitCameraMediaStream();
       await resetCameraZoomTo1x(mediaStream);
       setStream(mediaStream);
       setCameraActive(true);
@@ -466,7 +461,7 @@ export default function AddProductPage() {
                 autoPlay
                 playsInline
                 muted
-                className="block h-full w-full object-contain bg-black"
+                className="block h-full w-full object-cover object-center bg-black"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center min-h-[200px]">

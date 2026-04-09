@@ -109,22 +109,30 @@ export default function HomePage() {
   return (
     <>
       <Navbar />
-      <main
-        className="min-h-[calc(100vh-4rem)] flex flex-col px-4 py-8"
-        style={{ backgroundColor: 'var(--bg-primary)' }}
-      >
+      <main className="page-shell min-h-[calc(100dvh-4rem)] flex flex-col px-4 sm:px-6 py-8 sm:py-10 safe-area-pb">
       {mode === 'pick' && (
         <div className="flex-1 flex flex-col items-center justify-center gap-8 max-w-md mx-auto w-full">
-          <h1
-            className="text-xl font-semibold text-center"
-            style={{ color: 'var(--text-primary)' }}
-          >
-            Easy Business
-          </h1>
+          <div className="text-center space-y-3 w-full motion-safe:animate-fade-up">
+            <p
+              className="text-xs sm:text-sm font-semibold uppercase tracking-[0.2em]"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              Visual catalog
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gradient-accent">
+              Easy Business
+            </h1>
+            <p
+              className="text-sm sm:text-base max-w-xs mx-auto leading-relaxed"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              Find products by photo or ID in seconds.
+            </p>
+          </div>
           <div className="flex flex-col gap-4 w-full">
             <button
               type="button"
-              className="btn-primary w-full min-h-[56px] text-base flex items-center justify-center gap-3"
+              className="btn-primary w-full min-h-[56px] text-base flex items-center justify-center gap-3 rounded-2xl motion-safe:animate-fade-up-delay-1"
               onClick={() => setMode('image')}
             >
               <CameraIcon size={22} aria-hidden />
@@ -132,7 +140,7 @@ export default function HomePage() {
             </button>
             <button
               type="button"
-              className="btn-secondary w-full min-h-[56px] text-base flex items-center justify-center gap-3"
+              className="btn-secondary w-full min-h-[56px] text-base flex items-center justify-center gap-3 rounded-2xl motion-safe:animate-fade-up-delay-2"
               onClick={() => setMode('id')}
             >
               <Hash size={22} aria-hidden />
@@ -147,7 +155,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={goPick}
-            className="self-start inline-flex items-center gap-2 text-sm font-medium min-h-[40px]"
+            className="self-start inline-flex items-center gap-2 text-sm font-semibold min-h-[44px] px-3 -ml-1 rounded-xl pill-icon-btn"
             style={{ color: 'var(--text-secondary)' }}
           >
             <ArrowLeft size={18} aria-hidden />
@@ -162,9 +170,9 @@ export default function HomePage() {
           />
           {message && (
             <div
-              className="rounded-2xl px-4 py-4 flex items-center justify-center gap-3"
+              className="glass-panel-strong rounded-2xl px-4 py-4 flex items-center justify-center gap-3 border"
               style={{
-                backgroundColor: 'var(--accent-light)',
+                borderColor: 'var(--glass-border-subtle)',
                 color: 'var(--accent)',
               }}
               role="status"
@@ -192,13 +200,17 @@ export default function HomePage() {
           <button
             type="button"
             onClick={goPick}
-            className="self-start inline-flex items-center gap-2 text-sm font-medium min-h-[40px]"
+            className="self-start inline-flex items-center gap-2 text-sm font-semibold min-h-[44px] px-3 -ml-1 rounded-xl pill-icon-btn"
             style={{ color: 'var(--text-secondary)' }}
           >
             <ArrowLeft size={18} aria-hidden />
             Back
           </button>
-          <form onSubmit={handleIdSearch} className="space-y-4">
+          <form
+            onSubmit={handleIdSearch}
+            className="space-y-5 glass-panel-strong rounded-3xl p-5 sm:p-6 border"
+            style={{ borderColor: 'var(--glass-border-subtle)' }}
+          >
             <label
               htmlFor="product-id-search"
               className="block text-sm font-medium"
@@ -218,7 +230,7 @@ export default function HomePage() {
             <button
               type="submit"
               disabled={searching || !idInput.trim()}
-              className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-50"
+              className="btn-primary w-full min-h-[52px] flex items-center justify-center gap-2 disabled:opacity-50 rounded-2xl"
             >
               {searching ? (
                 <Loader2 className="animate-spin motion-reduce:animate-none" size={20} />

@@ -26,7 +26,7 @@ export default function CartPage() {
   return (
     <>
       <Navbar />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 min-h-[100dvh] page-shell safe-area-pb">
         <h1
           className="text-2xl md:text-3xl font-bold mb-8"
           style={{ color: 'var(--text-primary)' }}
@@ -118,26 +118,18 @@ export default function CartPage() {
                       >
                         {item.name}
                       </h3>
-                      <p
-                        className="text-sm"
-                        style={{ color: 'var(--text-muted)' }}
-                      >
-                        ID: {item.productId}
-                        {item.variant &&
-                          ` | ${Object.values(item.variant).filter(Boolean).join(', ')}`}
-                      </p>
-                      {cap !== undefined && (
-                        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
-                          In stock:{' '}
-                          <span className="font-semibold tabular-nums">{cap}</span>
-                          {atMax && (
-                            <span style={{ color: 'var(--warning)' }}>
-                              {' '}
-                              (max in cart)
-                            </span>
-                          )}
-                        </p>
-                      )}
+                      {item.variant &&
+                        Object.values(item.variant).filter(Boolean).length >
+                          0 && (
+                          <p
+                            className="text-sm"
+                            style={{ color: 'var(--text-muted)' }}
+                          >
+                            {Object.values(item.variant)
+                              .filter(Boolean)
+                              .join(', ')}
+                          </p>
+                        )}
                       <p
                         className="font-bold mt-1"
                         style={{ color: 'var(--accent)' }}

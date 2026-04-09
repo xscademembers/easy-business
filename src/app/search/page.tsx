@@ -80,18 +80,21 @@ function SearchContent() {
 
   return (
     <>
-      <section className="py-8">
+      <section className="py-6 sm:py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3 mb-2">
-            <Search size={24} style={{ color: 'var(--accent)' }} />
+          <div className="glass-panel-strong rounded-2xl sm:rounded-3xl p-5 sm:p-6 border mb-6" style={{ borderColor: 'var(--glass-border-subtle)' }}>
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <div className="logo-mark w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white">
+              <Search size={20} aria-hidden />
+            </div>
             <h1
-              className="text-2xl md:text-3xl font-bold"
+              className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight min-w-0"
               style={{ color: 'var(--text-primary)' }}
             >
-              {query ? `Results for "${query}"` : 'All Products'}
+              {query ? `Results for “${query}”` : 'All Products'}
             </h1>
           </div>
-          <p style={{ color: 'var(--text-secondary)' }}>
+          <p className="text-sm sm:text-base" style={{ color: 'var(--text-secondary)' }}>
             {loading
               ? 'Searching...'
               : `${results.length} product${results.length !== 1 ? 's' : ''} found`}
@@ -108,10 +111,11 @@ function SearchContent() {
               {fetchError}
             </p>
           ) : null}
+          </div>
         </div>
       </section>
 
-      <section className="pb-16">
+      <section className="pb-12 sm:pb-16 safe-area-pb">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {loading ? (
             <div className="flex justify-center py-16">
@@ -155,7 +159,7 @@ export default function SearchPage() {
   return (
     <>
       <Navbar />
-      <main className="min-h-screen">
+      <main className="min-h-[100dvh] page-shell">
         <Suspense
           fallback={
             <div className="flex justify-center py-24">

@@ -15,6 +15,7 @@ import {
 import Link from 'next/link';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
 import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
+import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
 
 export default function EditProductPage() {
@@ -79,13 +80,7 @@ export default function EditProductPage() {
     try {
       setError('');
       setCameraActive(true);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 720 },
-          height: { ideal: 1280 },
-        },
-      });
+      const mediaStream = await getPortraitCameraMediaStream();
       await resetCameraZoomTo1x(mediaStream);
       setStream(mediaStream);
     } catch {
@@ -291,7 +286,7 @@ export default function EditProductPage() {
                 autoPlay
                 playsInline
                 muted
-                className="block h-full w-full object-contain bg-black"
+                className="block h-full w-full object-cover object-center bg-black"
               />
             ) : image ? (
               <img

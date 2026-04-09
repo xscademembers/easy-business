@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
 import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
+import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 
 interface CameraProps {
   onCapture: (imageDataUrl: string) => void;
@@ -42,27 +43,21 @@ export function Camera({
     setStream(null);
   }, []);
 
-  const videoConstraints: MediaTrackConstraints =
-    variant === 'portrait'
-      ? {
-          facingMode: 'environment',
-          width: { ideal: 720 },
-          height: { ideal: 1280 },
-        }
-      : {
-          facingMode: 'environment',
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        };
-
   const startCamera = useCallback(async () => {
     try {
       setError('');
       setCaptured('');
       stopStream();
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-      });
+      const mediaStream =
+        variant === 'portrait'
+          ? await getPortraitCameraMediaStream()
+          : await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: 'environment',
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+              },
+            });
       await resetCameraZoomTo1x(mediaStream);
       streamRef.current = mediaStream;
       setStream(mediaStream);
@@ -177,10 +172,10 @@ export function Camera({
   return (
     <div className="w-full min-w-0">
       <div
-        className={frameClass}
+        className={`${frameClass} glass-panel-strong overflow-hidden`}
         style={{
-          backgroundColor: 'var(--bg-tertiary)',
-          border: '2px solid var(--border)',
+          borderColor: 'var(--glass-border)',
+          boxShadow: `var(--glass-shadow), inset 0 1px 0 var(--glass-border-subtle)`,
         }}
       >
         {error ? (
@@ -216,7 +211,7 @@ export function Camera({
             autoPlay
             playsInline
             muted
-            className="block h-full w-full object-contain bg-black"
+            className="block h-full w-full object-cover object-center bg-black"
           />
         )}
 

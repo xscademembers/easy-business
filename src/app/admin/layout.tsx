@@ -26,13 +26,7 @@ export default function AdminLayout({
         onMobileClose={() => setSidebarOpen(false)}
       />
       <div className="flex-1 flex flex-col min-w-0">
-        <header
-          className="h-14 sm:h-16 border-b flex items-center justify-between px-3 sm:px-6 sticky top-0 z-40 backdrop-blur-xl gap-3"
-          style={{
-            backgroundColor: 'var(--nav-bg)',
-            borderColor: 'var(--border)',
-          }}
-        >
+        <header className="glass-nav h-14 sm:h-16 flex items-center justify-between px-3 sm:px-6 sticky top-0 z-40 gap-3 safe-area-pt">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setSidebarOpen(true)}

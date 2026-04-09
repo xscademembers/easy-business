@@ -2,97 +2,92 @@ import Link from 'next/link';
 
 export function Footer() {
   return (
-    <footer
-      className="border-t mt-16"
-      style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderColor: 'var(--border)',
-      }}
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-sm"
-                style={{ backgroundColor: 'var(--accent)' }}
-              >
-                EB
+    <footer className="relative mt-16 border-t border-transparent">
+      <div
+        className="glass-panel-strong rounded-t-[28px] border-b-0 mx-2 sm:mx-4 lg:mx-auto max-w-7xl overflow-hidden"
+        style={{ borderColor: 'var(--glass-border-subtle)' }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-8">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="logo-mark w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm">
+                  EB
+                </div>
+                <span
+                  className="text-lg font-bold tracking-tight"
+                  style={{ color: 'var(--text-primary)' }}
+                >
+                  Easy Business
+                </span>
               </div>
-              <span
-                className="text-lg font-bold"
-                style={{ color: 'var(--text-primary)' }}
+              <p
+                className="text-sm leading-relaxed max-w-sm"
+                style={{ color: 'var(--text-secondary)' }}
               >
-                Easy Business
-              </span>
+                Smart inventory and visual product search for modern
+                businesses.
+              </p>
             </div>
-            <p
-              className="text-sm leading-relaxed"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              Smart inventory & product identification system for modern
-              businesses.
-            </p>
-          </div>
 
-          <nav aria-label="Quick links">
-            <h3
-              className="font-semibold mb-4 text-sm uppercase tracking-wider"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              Quick Links
-            </h3>
-            <ul className="space-y-2">
-              {[
-                { href: '/', label: 'Home' },
-                { href: '/cart', label: 'Cart' },
-                { href: '/contact', label: 'Contact' },
-              ].map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="text-sm transition-colors duration-200 hover:underline"
-                    style={{ color: 'var(--text-secondary)' }}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          <div>
-            <h3
-              className="font-semibold mb-4 text-sm uppercase tracking-wider"
-              style={{ color: 'var(--text-muted)' }}
-            >
-              Contact
-            </h3>
-            <p
-              className="text-sm"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              Have questions?{' '}
-              <Link
-                href="/contact"
-                className="underline"
-                style={{ color: 'var(--accent)' }}
+            <nav aria-label="Quick links">
+              <h3
+                className="font-semibold mb-4 text-xs uppercase tracking-widest"
+                style={{ color: 'var(--text-muted)' }}
               >
-                Send us a message
-              </Link>
-            </p>
-          </div>
-        </div>
+                Quick links
+              </h3>
+              <ul className="space-y-3">
+                {[
+                  { href: '/', label: 'Home' },
+                  { href: '/cart', label: 'Cart' },
+                  { href: '/contact', label: 'Contact' },
+                ].map((link) => (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className="text-sm font-medium inline-flex items-center min-h-[40px] motion-safe:transition-colors py-1"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      <span className="border-b border-transparent hover:border-current pb-0.5">
+                        {link.label}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
 
-        <div
-          className="border-t mt-8 pt-8 text-center text-sm"
-          style={{
-            borderColor: 'var(--border)',
-            color: 'var(--text-muted)',
-          }}
-        >
-          &copy; {new Date().getFullYear()} Easy Business. All rights
-          reserved.
+            <div>
+              <h3
+                className="font-semibold mb-4 text-xs uppercase tracking-widest"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Contact
+              </h3>
+              <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                Have questions?{' '}
+                <Link
+                  href="/contact"
+                  className="font-semibold underline underline-offset-2 decoration-2"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Send us a message
+                </Link>
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="border-t mt-10 pt-8 text-center text-sm"
+            style={{
+              borderColor: 'var(--glass-border-subtle)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            &copy; {new Date().getFullYear()} Easy Business. All rights
+            reserved.
+          </div>
         </div>
       </div>
     </footer>

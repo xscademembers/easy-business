@@ -8,10 +8,10 @@ export function ThemeToggle() {
 
   return (
     <button
+      type="button"
       onClick={toggleTheme}
-      className="p-2.5 rounded-xl transition-all duration-200 hover:scale-105"
+      className="pill-icon-btn p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center motion-safe:hover:scale-[1.03] motion-reduce:hover:scale-100"
       style={{
-        backgroundColor: 'var(--bg-tertiary)',
         color: 'var(--text-primary)',
       }}
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
