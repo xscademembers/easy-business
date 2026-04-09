@@ -58,7 +58,7 @@ export default function AdminProductsPage() {
             Products
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>
-            CLIP embeddings + Atlas vector index &quot;vector_index&quot;
+            OpenAI embeddings + Atlas vector index &quot;vector_index&quot;
           </p>
         </div>
         <Link

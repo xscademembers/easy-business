@@ -128,9 +128,9 @@ export default function AddProductPage() {
             Product image
           </h2>
           <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            A CLIP embedding is generated on the server and stored for visual
-            search. Configure <code className="text-xs">CLIP_API_URL</code> and{' '}
-            <code className="text-xs">CLIP_API_KEY</code> in your environment.
+            An embedding is generated on the server (OpenAI vision → text
+            embedding) and stored for visual search. Set{' '}
+            <code className="text-xs">OPENAI_API_KEY</code> in your environment.
           </p>
           <div
             className="rounded-xl overflow-hidden aspect-[16/9] relative"

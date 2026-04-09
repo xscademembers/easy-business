@@ -1,5 +1,5 @@
 /**
- * Client-side resize + JPEG encode before upload (reduces payload and CLIP latency).
+ * Client-side resize + JPEG encode before upload (reduces payload and API latency).
  * Largest side is capped at maxSide; uses 8px-aligned dimensions where practical.
  */
 export function compressImageDataUrl(

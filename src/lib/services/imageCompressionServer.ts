@@ -8,7 +8,7 @@ function stripDataUrl(dataUrlOrBase64: string): Buffer {
 }
 
 /**
- * Resize and JPEG-compress an image before sending to the CLIP API.
+ * Resize and JPEG-compress an image before embedding (OpenAI vision + embeddings).
  * Keeps largest side ≤ maxSide; does not upscale small images.
  */
 export async function compressImageForClip(

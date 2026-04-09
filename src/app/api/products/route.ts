@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { compressImageForClip } from '@/lib/services/imageCompressionServer';
-import { getClipEmbeddingFromJpegBuffer } from '@/lib/services/clipApi';
+import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
 
 const publicFields = 'name price image_url';
 
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       image_url,
     });
 
-    const embedding = await getClipEmbeddingFromJpegBuffer(jpegBuffer);
+    const embedding = await getImageEmbeddingFromJpegBuffer(jpegBuffer);
 
     const product = await Product.create({
       name: name.trim(),

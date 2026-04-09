@@ -91,7 +91,7 @@ export default function HomePage() {
                   style={{ color: 'var(--text-secondary)' }}
                 >
                   Take a photo and we&apos;ll match it to the closest product in
-                  the catalog using image embeddings.
+                  the catalog using OpenAI vision and text embeddings.
                 </p>
 
                 <div className="flex flex-wrap gap-3">

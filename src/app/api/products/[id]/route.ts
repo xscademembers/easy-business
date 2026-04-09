@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { compressImageForClip } from '@/lib/services/imageCompressionServer';
-import { getClipEmbeddingFromJpegBuffer } from '@/lib/services/clipApi';
+import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
 
 const publicFields = 'name price image_url';
 
@@ -83,7 +83,7 @@ export async function PUT(
     if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
       const { buffer, dataUrl } = await compressImageForClip(imageBase64);
       update.image_url = dataUrl;
-      update.embedding = await getClipEmbeddingFromJpegBuffer(buffer);
+      update.embedding = await getImageEmbeddingFromJpegBuffer(buffer);
     } else if (
       typeof image_url === 'string' &&
       /^https?:\/\//i.test(image_url.trim())
@@ -99,7 +99,7 @@ export async function PUT(
       const raw = Buffer.from(await res.arrayBuffer());
       const { buffer } = await compressImageForClip(raw);
       update.image_url = url;
-      update.embedding = await getClipEmbeddingFromJpegBuffer(buffer);
+      update.embedding = await getImageEmbeddingFromJpegBuffer(buffer);
     }
 
     if (Object.keys(update).length === 0) {

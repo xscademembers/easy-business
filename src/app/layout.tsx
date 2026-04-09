@@ -7,7 +7,8 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Easy Business',
-  description: 'Visual product search with CLIP embeddings and vector similarity',
+  description:
+    'Visual product search with OpenAI-powered image descriptions and vector similarity',
 };
 
 export default function RootLayout({
