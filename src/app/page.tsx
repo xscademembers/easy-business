@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { Camera } from '@/components/Camera';
+import { Navbar } from '@/components/Navbar';
 import {
   ImageSearchResults,
   type SearchResultProduct,
@@ -106,10 +107,12 @@ export default function HomePage() {
   };
 
   return (
-    <main
-      className="min-h-screen flex flex-col px-4 py-8"
-      style={{ backgroundColor: 'var(--bg-primary)' }}
-    >
+    <>
+      <Navbar />
+      <main
+        className="min-h-[calc(100vh-4rem)] flex flex-col px-4 py-8"
+        style={{ backgroundColor: 'var(--bg-primary)' }}
+      >
       {mode === 'pick' && (
         <div className="flex-1 flex flex-col items-center justify-center gap-8 max-w-md mx-auto w-full">
           <h1
@@ -239,6 +242,7 @@ export default function HomePage() {
           )}
         </div>
       )}
-    </main>
+      </main>
+    </>
   );
 }

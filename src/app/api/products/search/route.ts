@@ -5,9 +5,42 @@ import { compressImageForClip } from '@/lib/services/imageCompressionServer';
 import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
 import { findNearestProductsByEmbedding } from '@/lib/services/vectorSearch';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
-import { getVectorMatchMinScore } from '@/lib/constants/searchScores';
+import { selectStrictVectorMatches } from '@/lib/constants/searchScores';
 
 const publicSelect = PRODUCT_PUBLIC_FIELDS;
+
+const SIMILAR_LIMIT = 8;
+
+async function hydrateHitsWithDocs(
+  hits: Array<{
+    _id: unknown;
+    name: string;
+    price: number;
+    image_url: string;
+    score: number;
+  }>
+): Promise<Record<string, unknown>[]> {
+  if (!hits.length) return [];
+  const ids = hits.map((h) => h._id);
+  const docs = await Product.find({ _id: { $in: ids } })
+    .select(publicSelect)
+    .lean();
+  const byId = new Map(docs.map((d) => [String(d._id), d]));
+  return hits.map((h) => {
+    const doc = byId.get(String(h._id));
+    if (!doc) {
+      return {
+        _id: h._id,
+        name: h.name,
+        price: h.price,
+        image_url: h.image_url,
+        score: h.score,
+        quantity: 0,
+      };
+    }
+    return { ...doc, score: h.score };
+  });
+}
 
 export async function POST(request: Request) {
   try {
@@ -58,48 +91,41 @@ export async function POST(request: Request) {
     if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
       const { buffer } = await compressImageForClip(imageBase64);
       const embedding = await getImageEmbeddingFromJpegBuffer(buffer);
-      const minScore = getVectorMatchMinScore();
-      const hits = await findNearestProductsByEmbedding(embedding, 20, 200);
+      const hits = await findNearestProductsByEmbedding(embedding, 24, 250);
 
-      const matched = hits.filter((h) => h.score >= minScore);
-      const similarProducts = hits
-        .filter((h) => h.score < minScore)
-        .slice(0, 8)
-        .map((h) => ({
-          _id: h._id,
-          name: h.name,
-          price: h.price,
-          image_url: h.image_url,
-          score: h.score,
-        }));
+      const { matches, orderedRest, meta } = selectStrictVectorMatches(hits);
 
-      if (matched.length === 0) {
+      const similarHits = orderedRest.slice(0, SIMILAR_LIMIT);
+      const similarProducts = await hydrateHitsWithDocs(similarHits);
+
+      if (matches.length === 0) {
         return NextResponse.json({
           products: [],
           similarProducts,
           matchType: 'none',
-          threshold: minScore,
+          threshold: meta.effectiveFloor,
+          vectorMeta: {
+            topScore: meta.topScore,
+            absoluteMin: meta.absoluteMin,
+            effectiveFloor: meta.effectiveFloor,
+            relativeMargin: meta.relativeMargin,
+          },
         });
       }
 
-      const ids = matched.map((m) => m._id);
-      const docs = await Product.find({ _id: { $in: ids } })
-        .select(publicSelect)
-        .lean();
-      const byId = new Map(docs.map((d) => [String(d._id), d]));
-      const products = matched
-        .map((m) => {
-          const doc = byId.get(String(m._id));
-          if (!doc) return null;
-          return { ...doc, score: m.score };
-        })
-        .filter(Boolean);
+      const products = await hydrateHitsWithDocs(matches);
 
       return NextResponse.json({
         products,
         similarProducts: similarProducts.length ? similarProducts : undefined,
         matchType: 'vector',
-        threshold: minScore,
+        threshold: meta.effectiveFloor,
+        vectorMeta: {
+          topScore: meta.topScore,
+          absoluteMin: meta.absoluteMin,
+          effectiveFloor: meta.effectiveFloor,
+          relativeMargin: meta.relativeMargin,
+        },
       });
     }
 

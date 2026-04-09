@@ -23,15 +23,13 @@ export default function BulkUploadPage() {
     quantity: '0',
     category: 'general',
     sizes: '',
-    productCode: '',
   });
   const [checking, setChecking] = useState(false);
   const [similarMeta, setSimilarMeta] = useState<SimilarMeta | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [dupChoice, setDupChoice] = useState<'pending' | 'update' | 'create' | null>(
-    null
-  );
+  /** null = no choice yet when a duplicate is shown; 'update' | 'create' = explicit choice for this slide */
+  const [dupChoice, setDupChoice] = useState<'update' | 'create' | null>(null);
 
   const current = slides[step];
 
@@ -82,7 +80,6 @@ export default function BulkUploadPage() {
           duplicateCandidate: data.duplicateCandidate ?? null,
           codeMatch: data.codeMatch ?? null,
         });
-        if (data.duplicateCandidate) setDupChoice('pending');
       }
     } catch {
       /* ignore */
@@ -103,6 +100,8 @@ export default function BulkUploadPage() {
     const s = slides[idx]!;
     setForm((f) => ({ ...f, name: s.name }));
     setError('');
+    setDupChoice(null);
+    setSimilarMeta(null);
   };
 
   const sizesArray =
@@ -128,7 +127,6 @@ export default function BulkUploadPage() {
           quantity: parseInt(form.quantity, 10) || 0,
           category: form.category,
           sizes: sizesArray,
-          productCode: form.productCode.trim() || undefined,
           imageBase64: current.dataUrl,
         }),
       });
@@ -159,7 +157,6 @@ export default function BulkUploadPage() {
           quantity: parseInt(form.quantity, 10) || 0,
           category: form.category,
           sizes: sizesArray,
-          productCode: form.productCode.trim() || undefined,
           imageBase64: current.dataUrl,
         }),
       });
@@ -191,7 +188,6 @@ export default function BulkUploadPage() {
         quantity: '0',
         category: 'general',
         sizes: '',
-        productCode: '',
       });
     }
   };
@@ -202,14 +198,75 @@ export default function BulkUploadPage() {
       setError('Name and price are required');
       return;
     }
-    if (dupChoice === 'pending' && similarMeta?.duplicateCandidate) {
-      setError('Choose: update existing product or create new');
+    if (saving) return;
+
+    if (checking) {
+      setError(
+        'Still checking for similar products — wait a moment, then try Save again.'
+      );
       return;
     }
+
     if (dupChoice === 'update' && similarMeta?.duplicateCandidate) {
       await saveUpdate(String(similarMeta.duplicateCandidate._id));
       return;
     }
+
+    if (dupChoice === 'create') {
+      await saveCreate();
+      return;
+    }
+
+    if (
+      similarMeta?.duplicateCandidate &&
+      dupChoice !== 'update' &&
+      dupChoice !== 'create'
+    ) {
+      setError(
+        'Similar product found — choose Same product → update or New product → create, then Save again.'
+      );
+      return;
+    }
+
+    setChecking(true);
+    setError('');
+    try {
+      const res = await fetch('/api/products/similar-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: current.dataUrl,
+          extractCodes: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Could not verify duplicates. Try again.'
+        );
+      }
+      setSimilarMeta({
+        duplicateCandidate: data.duplicateCandidate ?? null,
+        codeMatch: data.codeMatch ?? null,
+      });
+      if (data.duplicateCandidate) {
+        setDupChoice(null);
+        setError(
+          'Similar product found — choose Same product → update or New product → create, then Save again.'
+        );
+        return;
+      }
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Could not verify duplicates. Try again.'
+      );
+      return;
+    } finally {
+      setChecking(false);
+    }
+
     await saveCreate();
   };
 
@@ -303,7 +360,9 @@ export default function BulkUploadPage() {
             </p>
           )}
 
-          {similarMeta?.duplicateCandidate && dupChoice === 'pending' && (
+          {similarMeta?.duplicateCandidate &&
+            dupChoice !== 'update' &&
+            dupChoice !== 'create' && (
             <div
               className="rounded-xl p-4 space-y-3"
               style={{
@@ -399,21 +458,9 @@ export default function BulkUploadPage() {
                   <option value="other">Other</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
-                  Product code (optional)
-                </label>
-                <input
-                  className="input-field"
-                  value={form.productCode}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      productCode: e.target.value.replace(/\D/g, '').slice(0, 7),
-                    })
-                  }
-                />
-              </div>
+              <p className="sm:col-span-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+                A unique product code is generated automatically when each item is saved.
+              </p>
               {form.category === 'clothing' && (
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
@@ -439,7 +486,7 @@ export default function BulkUploadPage() {
             <button
               type="button"
               className="btn-primary flex items-center gap-2"
-              disabled={saving}
+              disabled={saving || checking}
               onClick={() => void handleNext()}
             >
               {saving ? (

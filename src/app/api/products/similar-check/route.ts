@@ -6,7 +6,7 @@ import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbed
 import { findNearestProductsByEmbedding } from '@/lib/services/vectorSearch';
 import { extractDigitCodesFromJpegBuffer } from '@/lib/services/extractDigitCodesFromImage';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
-import { getVectorDuplicateMinScore } from '@/lib/constants/searchScores';
+import { getVectorUploadDuplicateMinScore } from '@/lib/constants/searchScores';
 
 const publicSelect = PRODUCT_PUBLIC_FIELDS;
 
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     }
 
     const { buffer } = await compressImageForClip(imageBase64);
-    const dupThreshold = getVectorDuplicateMinScore();
+    const dupThreshold = getVectorUploadDuplicateMinScore();
 
     const [embedding, ocrCodes] = await Promise.all([
       getImageEmbeddingFromJpegBuffer(buffer),

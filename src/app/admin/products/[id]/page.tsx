@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
 
 export default function EditProductPage() {
@@ -85,6 +86,7 @@ export default function EditProductPage() {
           height: { ideal: 1280 },
         },
       });
+      await resetCameraZoomTo1x(mediaStream);
       setStream(mediaStream);
     } catch {
       setError('Could not access camera');
@@ -215,7 +217,6 @@ export default function EditProductPage() {
         quantity: parseInt(form.quantity, 10) || 0,
         category: form.category.trim() || 'general',
         sizes: sizesArray,
-        productCode: form.productCode.trim() || undefined,
       };
       if (imageDirty && image) {
         body.imageBase64 = image;
@@ -290,7 +291,7 @@ export default function EditProductPage() {
                 autoPlay
                 playsInline
                 muted
-                className="block h-full w-full object-cover bg-black"
+                className="block h-full w-full object-contain bg-black"
               />
             ) : image ? (
               <img
@@ -499,20 +500,21 @@ export default function EditProductPage() {
                 className="block text-sm font-medium mb-2"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                Product code (5–7 digits)
+                Product code
               </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={form.productCode}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    productCode: e.target.value.replace(/\D/g, '').slice(0, 7),
-                  })
-                }
-                className="input-field"
-              />
+              <div
+                className="input-field tabular-nums tracking-wide font-medium"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-primary)',
+                }}
+                aria-live="polite"
+              >
+                {form.productCode || '—'}
+              </div>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                Auto-generated and permanent. Use the product list to copy this code.
+              </p>
             </div>
 
             {form.category === 'clothing' && (

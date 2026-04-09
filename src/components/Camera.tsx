@@ -8,6 +8,7 @@ import {
   ImagePlus,
 } from 'lucide-react';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 
 interface CameraProps {
   onCapture: (imageDataUrl: string) => void;
@@ -62,6 +63,7 @@ export function Camera({
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: videoConstraints,
       });
+      await resetCameraZoomTo1x(mediaStream);
       streamRef.current = mediaStream;
       setStream(mediaStream);
     } catch {
@@ -214,7 +216,7 @@ export function Camera({
             autoPlay
             playsInline
             muted
-            className="block h-full w-full object-cover bg-black"
+            className="block h-full w-full object-contain bg-black"
           />
         )}
 

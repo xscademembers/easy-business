@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
@@ -8,6 +9,19 @@ import Link from 'next/link';
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, total, itemCount } = useCart();
+  const [stockNotice, setStockNotice] = useState('');
+
+  const showStockError = (message: string) => {
+    setStockNotice(message);
+    window.setTimeout(() => setStockNotice(''), 5000);
+  };
+
+  const bump = (productId: string, next: number) => {
+    const result = updateQuantity(productId, next);
+    if (!result.ok) {
+      showStockError(result.message);
+    }
+  };
 
   return (
     <>
@@ -27,6 +41,20 @@ export default function CartPage() {
             </span>
           )}
         </h1>
+
+        {stockNotice && (
+          <div
+            className="mb-6 px-4 py-3 rounded-xl text-sm"
+            style={{
+              backgroundColor:
+                'color-mix(in srgb, var(--danger) 12%, transparent)',
+              color: 'var(--danger)',
+            }}
+            role="alert"
+          >
+            {stockNotice}
+          </div>
+        )}
 
         {items.length === 0 ? (
           <div className="text-center py-16">
@@ -54,95 +82,122 @@ export default function CartPage() {
         ) : (
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
-              {items.map((item) => (
-                <article
-                  key={item.productId}
-                  className="card flex gap-4"
-                >
-                  <div
-                    className="w-20 h-20 rounded-xl overflow-hidden shrink-0"
-                    style={{ backgroundColor: 'var(--bg-tertiary)' }}
+              {items.map((item) => {
+                const cap = item.maxStock;
+                const atMax =
+                  cap !== undefined && item.quantity >= cap;
+                return (
+                  <article
+                    key={item.productId}
+                    className="card flex gap-4"
                   >
-                    {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <ShoppingBag
-                          size={24}
-                          style={{ color: 'var(--text-muted)' }}
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <h3
-                      className="font-semibold truncate"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      {item.name}
-                    </h3>
-                    <p
-                      className="text-sm"
-                      style={{ color: 'var(--text-muted)' }}
-                    >
-                      ID: {item.productId}
-                      {item.variant &&
-                        ` | ${Object.values(item.variant).filter(Boolean).join(', ')}`}
-                    </p>
-                    <p
-                      className="font-bold mt-1"
-                      style={{ color: 'var(--accent)' }}
-                    >
-                      ${(item.price * item.quantity).toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-2">
-                    <button
-                      onClick={() => removeItem(item.productId)}
-                      className="p-1.5 rounded-lg transition-colors"
-                      style={{ color: 'var(--danger)' }}
-                      aria-label="Remove item"
-                    >
-                      <Trash2 size={16} />
-                    </button>
                     <div
-                      className="flex items-center rounded-lg border"
-                      style={{ borderColor: 'var(--border)' }}
+                      className="w-20 h-20 rounded-xl overflow-hidden shrink-0"
+                      style={{ backgroundColor: 'var(--bg-tertiary)' }}
                     >
-                      <button
-                        onClick={() =>
-                          updateQuantity(item.productId, item.quantity - 1)
-                        }
-                        className="p-1.5"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        <Minus size={14} />
-                      </button>
-                      <span
-                        className="w-8 text-center text-sm font-semibold"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() =>
-                          updateQuantity(item.productId, item.quantity + 1)
-                        }
-                        className="p-1.5"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        <Plus size={14} />
-                      </button>
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ShoppingBag
+                            size={24}
+                            style={{ color: 'var(--text-muted)' }}
+                          />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </article>
-              ))}
+
+                    <div className="flex-1 min-w-0">
+                      <h3
+                        className="font-semibold truncate"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {item.name}
+                      </h3>
+                      <p
+                        className="text-sm"
+                        style={{ color: 'var(--text-muted)' }}
+                      >
+                        ID: {item.productId}
+                        {item.variant &&
+                          ` | ${Object.values(item.variant).filter(Boolean).join(', ')}`}
+                      </p>
+                      {cap !== undefined && (
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                          In stock:{' '}
+                          <span className="font-semibold tabular-nums">{cap}</span>
+                          {atMax && (
+                            <span style={{ color: 'var(--warning)' }}>
+                              {' '}
+                              (max in cart)
+                            </span>
+                          )}
+                        </p>
+                      )}
+                      <p
+                        className="font-bold mt-1"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        ${(item.price * item.quantity).toFixed(2)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <button
+                        onClick={() => removeItem(item.productId)}
+                        className="p-1.5 rounded-lg transition-colors"
+                        style={{ color: 'var(--danger)' }}
+                        aria-label="Remove item"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <div
+                        className="flex items-center rounded-lg border"
+                        style={{ borderColor: 'var(--border)' }}
+                      >
+                        <button
+                          onClick={() =>
+                            bump(item.productId, item.quantity - 1)
+                          }
+                          className="p-1.5"
+                          style={{ color: 'var(--text-primary)' }}
+                          type="button"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus size={14} />
+                        </button>
+                        <span
+                          className="w-8 text-center text-sm font-semibold tabular-nums"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() =>
+                            bump(item.productId, item.quantity + 1)
+                          }
+                          className="p-1.5 disabled:opacity-40"
+                          style={{ color: 'var(--text-primary)' }}
+                          type="button"
+                          disabled={atMax}
+                          aria-label="Increase quantity"
+                          title={
+                            atMax
+                              ? 'No more stock available'
+                              : 'Increase quantity'
+                          }
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
 
             <aside>

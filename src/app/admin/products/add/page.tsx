@@ -13,6 +13,7 @@ import {
   SpellCheck,
 } from 'lucide-react';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
 
 type SimilarMeta = {
@@ -39,7 +40,6 @@ export default function AddProductPage() {
     quantity: '0',
     category: 'general',
     sizes: '',
-    productCode: '',
   });
   const [image, setImage] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
@@ -56,6 +56,12 @@ export default function AddProductPage() {
     null
   );
   const [ignoreCodeMatch, setIgnoreCodeMatch] = useState(false);
+  /** After user explicitly chooses "Add new" on duplicate dialog, allow one create without re-checking. */
+  const [skipDuplicateGuard, setSkipDuplicateGuard] = useState(false);
+
+  useEffect(() => {
+    setSkipDuplicateGuard(false);
+  }, [image]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -83,6 +89,7 @@ export default function AddProductPage() {
           height: { ideal: 1280 },
         },
       });
+      await resetCameraZoomTo1x(mediaStream);
       setStream(mediaStream);
       setCameraActive(true);
     } catch {
@@ -135,6 +142,7 @@ export default function AddProductPage() {
     setImage('');
     setSimilarMeta(null);
     setIgnoreCodeMatch(false);
+    setSkipDuplicateGuard(false);
     void startCamera();
   };
 
@@ -249,6 +257,7 @@ export default function AddProductPage() {
       setError('Add a product photo first');
       return;
     }
+    if (saving) return;
     setSaving(true);
     setError('');
     try {
@@ -262,7 +271,6 @@ export default function AddProductPage() {
           quantity: parseInt(form.quantity, 10) || 0,
           category: form.category.trim() || 'general',
           sizes: sizesArray,
-          productCode: form.productCode.trim() || undefined,
           imageBase64: image,
         }),
       });
@@ -293,7 +301,6 @@ export default function AddProductPage() {
           quantity: parseInt(form.quantity, 10) || 0,
           category: form.category.trim() || 'general',
           sizes: sizesArray,
-          productCode: form.productCode.trim() || undefined,
           imageBase64: image,
         }),
       });
@@ -339,21 +346,75 @@ export default function AddProductPage() {
     }
   };
 
+  const ensureDuplicateResolvedThenCreate = async (
+    opts?: { fromIgnoredCode?: boolean }
+  ) => {
+    if (!image) {
+      setError('Add a product photo first');
+      return;
+    }
+    if (!opts?.fromIgnoredCode && similarMeta?.codeMatch && !ignoreCodeMatch) {
+      setCodeModal(true);
+      return;
+    }
+    if (skipDuplicateGuard) {
+      await createProduct();
+      return;
+    }
+
+    setCheckingSimilar(true);
+    setError('');
+    try {
+      const res = await fetch('/api/products/similar-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: image, extractCodes: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : 'Could not verify duplicates. Check your connection and try again.'
+        );
+      }
+      setSimilarMeta({
+        duplicateCandidate: data.duplicateCandidate ?? null,
+        codeMatch: data.codeMatch ?? similarMeta?.codeMatch ?? null,
+      });
+      if (data.duplicateCandidate) {
+        setDupModal(true);
+        setError(
+          'This photo matches an existing catalog item. Choose Update existing or Add new — or change the photo.'
+        );
+        return;
+      }
+      await createProduct();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not verify duplicates. Try again.'
+      );
+    } finally {
+      setCheckingSimilar(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving || checkingSimilar) return;
     if (similarMeta?.codeMatch && !ignoreCodeMatch && !codeModal) {
       setCodeModal(true);
       return;
     }
-    if (similarMeta?.duplicateCandidate && !dupModal) {
-      setDupModal(true);
-      return;
-    }
-    await createProduct();
+    await ensureDuplicateResolvedThenCreate();
   };
 
   const proceedAddNewDespiteDuplicate = async () => {
     setDupModal(false);
+    setError('');
+    setSkipDuplicateGuard(true);
     await createProduct();
   };
 
@@ -405,7 +466,7 @@ export default function AddProductPage() {
                 autoPlay
                 playsInline
                 muted
-                className="block h-full w-full object-cover bg-black"
+                className="block h-full w-full object-contain bg-black"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center min-h-[200px]">
@@ -618,24 +679,15 @@ export default function AddProductPage() {
               </select>
             </div>
 
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                Product code (optional, 5–7 digits)
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="\d{5,7}"
-                value={form.productCode}
-                onChange={(e) =>
-                  setForm({ ...form, productCode: e.target.value.replace(/\D/g, '').slice(0, 7) })
-                }
-                className="input-field"
-                placeholder="Auto if empty"
-              />
+            <div className="sm:col-span-2 rounded-xl px-4 py-3 text-sm" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+              <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                Product code
+              </p>
+              <p className="mt-1" style={{ color: 'var(--text-muted)' }}>
+                A unique <span className="tabular-nums">5–7</span> digit code is{' '}
+                <strong>generated automatically</strong> when you save. It appears
+                in the product list and on the storefront.
+              </p>
             </div>
 
             {form.category === 'clothing' && (
@@ -672,7 +724,7 @@ export default function AddProductPage() {
 
         <button
           type="submit"
-          disabled={saving || !image}
+          disabled={saving || checkingSimilar || !image}
           className="btn-primary flex items-center gap-2 disabled:opacity-60"
         >
           {saving ? (
@@ -745,7 +797,12 @@ export default function AddProductPage() {
               type="button"
               className="text-sm w-full"
               style={{ color: 'var(--text-muted)' }}
-              onClick={() => setDupModal(false)}
+              onClick={() => {
+                setDupModal(false);
+                setError(
+                  'Duplicate not resolved: use Update existing, Add new, or change the product photo before saving.'
+                );
+              }}
             >
               Cancel
             </button>
@@ -796,8 +853,9 @@ export default function AddProductPage() {
                 onClick={() => {
                   setCodeModal(false);
                   setIgnoreCodeMatch(true);
-                  if (similarMeta.duplicateCandidate) setDupModal(true);
-                  else void createProduct();
+                  void ensureDuplicateResolvedThenCreate({
+                    fromIgnoredCode: true,
+                  });
                 }}
               >
                 Create new anyway

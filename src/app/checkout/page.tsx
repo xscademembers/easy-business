@@ -1,16 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
-import { Banknote, CheckCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { CheckCircle, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCart();
-  const router = useRouter();
   const [form, setForm] = useState({ name: '', phone: '', email: '' });
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -67,14 +65,20 @@ export default function CheckoutPage() {
               className="text-2xl font-bold mb-3"
               style={{ color: 'var(--text-primary)' }}
             >
-              Order Placed!
+              Thank you!
             </h1>
             <p
-              className="mb-8"
+              className="mb-2"
               style={{ color: 'var(--text-secondary)' }}
             >
-              Please pay in cash (or your agreed in-store method) when you
-              collect your items.
+              Your order was received. We appreciate your purchase.
+            </p>
+            <p
+              className="mb-8 text-sm"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              You will be contacted using the details you provided if we need
+              anything else.
             </p>
             <Link href="/" className="btn-primary inline-flex items-center gap-2">
               Continue Shopping
@@ -195,43 +199,6 @@ export default function CheckoutPage() {
                   </div>
                 </div>
               </div>
-
-              <div className="card">
-                <h2
-                  className="text-lg font-bold mb-4"
-                  style={{ color: 'var(--text-primary)' }}
-                >
-                  Payment
-                </h2>
-                <div
-                  className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-xl border-2"
-                  style={{
-                    borderColor: 'var(--accent)',
-                    backgroundColor: 'var(--accent-light)',
-                  }}
-                >
-                  <Banknote
-                    size={28}
-                    className="shrink-0"
-                    style={{ color: 'var(--accent)' }}
-                  />
-                  <div>
-                    <p
-                      className="font-medium"
-                      style={{ color: 'var(--text-primary)' }}
-                    >
-                      In-store / cash payment only
-                    </p>
-                    <p
-                      className="text-sm mt-2"
-                      style={{ color: 'var(--text-secondary)' }}
-                    >
-                      Online card payment is not available. Bring payment when
-                      you pick up your order.
-                    </p>
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div>
@@ -296,11 +263,15 @@ export default function CheckoutPage() {
                 >
                   {submitting ? (
                     <>
-                      <Loader2 size={18} className="animate-spin" />
-                      Processing...
+                      <Loader2
+                        size={18}
+                        className="animate-spin motion-reduce:animate-none"
+                        aria-hidden
+                      />
+                      Processing…
                     </>
                   ) : (
-                    `Place Order - $${total.toFixed(2)}`
+                    'Buy now'
                   )}
                 </button>
               </div>
