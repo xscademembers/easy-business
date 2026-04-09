@@ -7,7 +7,18 @@ import {
 const ProductSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
+    description: { type: String, default: '' },
     price: { type: Number, required: true },
+    quantity: { type: Number, required: true, default: 0 },
+    category: { type: String, required: true, default: 'general' },
+    sizes: { type: [String], default: undefined },
+    productCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      index: true,
+      trim: true,
+    },
     image_url: { type: String, required: true },
     embedding: {
       type: [Number],

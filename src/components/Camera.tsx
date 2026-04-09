@@ -1,17 +1,34 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Camera as CameraIcon, RotateCcw, Loader2 } from 'lucide-react';
+import {
+  Camera as CameraIcon,
+  RotateCcw,
+  Loader2,
+  ImagePlus,
+} from 'lucide-react';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
 
 interface CameraProps {
   onCapture: (imageDataUrl: string) => void;
   loading?: boolean;
+  /** Taller preview to encourage portrait framing (search & upload). */
+  variant?: 'portrait' | 'standard';
+  showGallery?: boolean;
+  /** Request portrait lock when supported (mobile). */
+  lockOrientation?: boolean;
 }
 
-export function Camera({ onCapture, loading }: CameraProps) {
+export function Camera({
+  onCapture,
+  loading,
+  variant = 'standard',
+  showGallery = true,
+  lockOrientation = false,
+}: CameraProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
@@ -24,13 +41,26 @@ export function Camera({ onCapture, loading }: CameraProps) {
     setStream(null);
   }, []);
 
+  const videoConstraints: MediaTrackConstraints =
+    variant === 'portrait'
+      ? {
+          facingMode: 'environment',
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
+        }
+      : {
+          facingMode: 'environment',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        };
+
   const startCamera = useCallback(async () => {
     try {
       setError('');
       setCaptured('');
       stopStream();
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 640, height: 480 },
+        video: videoConstraints,
       });
       streamRef.current = mediaStream;
       setStream(mediaStream);
@@ -39,7 +69,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
         'Unable to access camera. Please allow camera permissions and try again.'
       );
     }
-  }, [stopStream]);
+  }, [stopStream, variant]);
 
   useEffect(() => {
     void startCamera();
@@ -49,6 +79,33 @@ export function Camera({ onCapture, loading }: CameraProps) {
       setStream(null);
     };
   }, [startCamera]);
+
+  useEffect(() => {
+    if (!lockOrientation || !stream) return;
+    const o = screen.orientation;
+    if (
+      o &&
+      typeof (o as ScreenOrientation & { lock?: (s: string) => Promise<void> })
+        .lock === 'function'
+    ) {
+      void (o as ScreenOrientation & { lock: (s: string) => Promise<void> })
+        .lock('portrait')
+        .catch(() => {});
+    }
+    return () => {
+      if (
+        o &&
+        typeof (o as ScreenOrientation & { unlock?: () => void }).unlock ===
+          'function'
+      ) {
+        try {
+          (o as ScreenOrientation & { unlock: () => void }).unlock();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, [lockOrientation, stream]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -64,16 +121,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
     };
   }, [stream, captured, error]);
 
-  const captureImage = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-    const raw = canvas.toDataURL('image/jpeg', 0.85);
+  const processDataUrl = async (raw: string) => {
     setCompressing(true);
     try {
       const compressed = await compressImageDataUrl(raw);
@@ -87,6 +135,31 @@ export function Camera({ onCapture, loading }: CameraProps) {
     }
   };
 
+  const captureImage = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    const raw = canvas.toDataURL('image/jpeg', 0.85);
+    await processDataUrl(raw);
+  };
+
+  const onGalleryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = reader.result;
+      if (typeof res === 'string') void processDataUrl(res);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const retake = () => {
     setCaptured('');
     void startCamera();
@@ -94,10 +167,15 @@ export function Camera({ onCapture, loading }: CameraProps) {
 
   const busy = loading || compressing;
 
+  const frameClass =
+    variant === 'portrait'
+      ? 'relative min-h-[280px] overflow-hidden rounded-2xl aspect-[3/4] max-w-md mx-auto'
+      : 'relative min-h-[240px] overflow-hidden rounded-2xl aspect-[4/3]';
+
   return (
     <div className="w-full min-w-0">
       <div
-        className="relative min-h-[240px] overflow-hidden rounded-2xl aspect-[4/3]"
+        className={frameClass}
         style={{
           backgroundColor: 'var(--bg-tertiary)',
           border: '2px solid var(--border)',
@@ -117,6 +195,7 @@ export function Camera({ onCapture, loading }: CameraProps) {
               {error}
             </p>
             <button
+              type="button"
               onClick={() => void startCamera()}
               className="btn-primary text-sm !px-4 !py-2"
             >
@@ -150,26 +229,50 @@ export function Camera({ onCapture, loading }: CameraProps) {
       </div>
 
       <canvas ref={canvasRef} className="hidden" />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        aria-hidden
+        onChange={onGalleryChange}
+      />
 
-      <div className="flex gap-3 mt-4">
+      <div className="flex flex-wrap gap-3 mt-4">
         {captured ? (
           <button
+            type="button"
             onClick={retake}
             disabled={busy}
-            className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
+            className="btn-secondary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50 min-h-[44px]"
           >
             <RotateCcw size={16} />
             Retake
           </button>
         ) : (
-          <button
-            onClick={() => void captureImage()}
-            disabled={!!error || busy || !stream}
-            className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50"
-          >
-            <CameraIcon size={16} />
-            Capture Image
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void captureImage()}
+              disabled={!!error || busy || !stream}
+              className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm disabled:opacity-50 min-h-[44px]"
+            >
+              <CameraIcon size={16} />
+              Capture Image
+            </button>
+            {showGallery && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!!error || busy}
+                className="btn-secondary flex items-center justify-center gap-2 text-sm px-4 min-h-[44px] disabled:opacity-50"
+                aria-label="Upload from gallery"
+              >
+                <ImagePlus size={16} />
+                Gallery
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

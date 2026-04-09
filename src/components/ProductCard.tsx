@@ -7,6 +7,7 @@ interface ProductCardProps {
     name: string;
     price: number;
     image_url?: string;
+    productCode?: string;
   };
 }
 
@@ -43,7 +44,7 @@ export function ProductCard({ product }: ProductCardProps) {
             className="text-xs font-mono truncate"
             style={{ color: 'var(--text-muted)' }}
           >
-            {product._id}
+            {product.productCode ? `Code ${product.productCode}` : product._id}
           </p>
 
           <div className="flex items-center justify-between pt-2">

@@ -3,8 +3,13 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { compressImageForClip } from '@/lib/services/imageCompressionServer';
 import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
+import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
+import {
+  ensureUniqueProductCode,
+  isValidProductCode,
+} from '@/lib/utils/productCode';
 
-const publicFields = 'name price image_url';
+const publicSelect = PRODUCT_PUBLIC_FIELDS;
 
 async function resolveImageAndBuffer(body: {
   imageBase64?: string;
@@ -31,6 +36,19 @@ async function resolveImageAndBuffer(body: {
   throw new Error('Provide imageBase64 or a http(s) image_url');
 }
 
+function normalizeSizes(
+  category: string,
+  sizes: unknown
+): string[] | undefined {
+  if (category !== 'clothing') return undefined;
+  if (!Array.isArray(sizes)) return undefined;
+  const cleaned = sizes
+    .filter((s): s is string => typeof s === 'string')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return cleaned.length ? cleaned : undefined;
+}
+
 export async function GET(request: Request) {
   try {
     await connectDB();
@@ -41,7 +59,7 @@ export async function GET(request: Request) {
 
     const [products, total] = await Promise.all([
       Product.find()
-        .select(publicFields)
+        .select(publicSelect)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -68,15 +86,31 @@ export async function POST(request: Request) {
   try {
     await connectDB();
     const body = await request.json();
-    const { name, price, imageBase64, image_url } = body as {
+    const {
+      name,
+      description,
+      price,
+      quantity,
+      category,
+      sizes,
+      productCode: productCodeInput,
+      imageBase64,
+      image_url,
+      embedding: _reject,
+    } = body as {
       name?: string;
+      description?: string;
       price?: number;
+      quantity?: number;
+      category?: string;
+      sizes?: unknown;
+      productCode?: string;
       imageBase64?: string;
       image_url?: string;
       embedding?: unknown;
     };
 
-    if (body.embedding !== undefined) {
+    if (_reject !== undefined) {
       return NextResponse.json(
         { error: 'embedding must be computed server-side' },
         { status: 400 }
@@ -90,21 +124,50 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'price is required' }, { status: 400 });
     }
 
+    const cat =
+      typeof category === 'string' && category.trim()
+        ? category.trim()
+        : 'general';
+    const qty =
+      typeof quantity === 'number' && !Number.isNaN(quantity)
+        ? Math.max(0, Math.floor(quantity))
+        : 0;
+    const desc =
+      typeof description === 'string' ? description.trim() : '';
+    const normalizedSizes = normalizeSizes(cat, sizes);
+
+    const codePref =
+      typeof productCodeInput === 'string' && productCodeInput.trim()
+        ? productCodeInput.trim()
+        : null;
+    if (codePref && !isValidProductCode(codePref)) {
+      return NextResponse.json(
+        { error: 'productCode must be 5–7 digits' },
+        { status: 400 }
+      );
+    }
+
     const { image_url: resolvedUrl, jpegBuffer } = await resolveImageAndBuffer({
       imageBase64,
       image_url,
     });
 
     const embedding = await getImageEmbeddingFromJpegBuffer(jpegBuffer);
+    const productCode = await ensureUniqueProductCode(Product, codePref);
 
     const product = await Product.create({
       name: name.trim(),
+      description: desc,
       price,
+      quantity: qty,
+      category: cat,
+      sizes: normalizedSizes,
+      productCode,
       image_url: resolvedUrl,
       embedding,
     });
 
-    const lean = await Product.findById(product._id).select(publicFields).lean();
+    const lean = await Product.findById(product._id).select(publicSelect).lean();
     return NextResponse.json(lean, { status: 201 });
   } catch (error: unknown) {
     console.error('POST /api/products error:', error);

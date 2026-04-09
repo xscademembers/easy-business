@@ -3,8 +3,26 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { compressImageForClip } from '@/lib/services/imageCompressionServer';
 import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
+import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
+import {
+  ensureUniqueProductCode,
+  isValidProductCode,
+} from '@/lib/utils/productCode';
 
-const publicFields = 'name price image_url';
+const publicSelect = PRODUCT_PUBLIC_FIELDS;
+
+function normalizeSizes(
+  category: string,
+  sizes: unknown
+): string[] | undefined {
+  if (category !== 'clothing') return undefined;
+  if (!Array.isArray(sizes)) return undefined;
+  const cleaned = sizes
+    .filter((s): s is string => typeof s === 'string')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return cleaned.length ? cleaned : undefined;
+}
 
 export async function GET(
   _request: Request,
@@ -13,7 +31,7 @@ export async function GET(
   try {
     await connectDB();
     const { id } = await params;
-    const product = await Product.findById(id).select(publicFields).lean();
+    const product = await Product.findById(id).select(publicSelect).lean();
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
@@ -33,14 +51,26 @@ export async function PUT(
     const body = await request.json();
     const {
       name,
+      description,
       price,
+      quantity,
+      quantityDelta,
+      category,
+      sizes,
+      productCode: productCodeInput,
       imageBase64,
       image_url,
       embedding: _reject,
       ...rest
     } = body as {
       name?: string;
+      description?: string;
       price?: number;
+      quantity?: number;
+      quantityDelta?: number;
+      category?: string;
+      sizes?: unknown;
+      productCode?: string;
       imageBase64?: string;
       image_url?: string;
       embedding?: unknown;
@@ -53,19 +83,19 @@ export async function PUT(
       );
     }
 
-    if (Object.keys(rest).length > 0) {
+    const allowedExtra = Object.keys(rest).filter(
+      (k) => !['_id', '__v'].includes(k)
+    );
+    if (allowedExtra.length > 0) {
       return NextResponse.json(
-        { error: 'Only name, price, imageBase64, and image_url can be updated' },
+        {
+          error: `Unknown fields: ${allowedExtra.join(', ')}`,
+        },
         { status: 400 }
       );
     }
 
-    const update: {
-      name?: string;
-      price?: number;
-      image_url?: string;
-      embedding?: number[];
-    } = {};
+    const update: Record<string, unknown> = {};
 
     if (name !== undefined) {
       if (typeof name !== 'string' || !name.trim()) {
@@ -73,11 +103,78 @@ export async function PUT(
       }
       update.name = name.trim();
     }
+    if (description !== undefined) {
+      update.description =
+        typeof description === 'string' ? description.trim() : '';
+    }
     if (price !== undefined) {
       if (typeof price !== 'number' || Number.isNaN(price)) {
         return NextResponse.json({ error: 'Invalid price' }, { status: 400 });
       }
       update.price = price;
+    }
+    if (quantity !== undefined) {
+      if (typeof quantity !== 'number' || Number.isNaN(quantity)) {
+        return NextResponse.json({ error: 'Invalid quantity' }, { status: 400 });
+      }
+      update.quantity = Math.max(0, Math.floor(quantity));
+    }
+    if (quantityDelta !== undefined) {
+      if (typeof quantityDelta !== 'number' || Number.isNaN(quantityDelta)) {
+        return NextResponse.json(
+          { error: 'Invalid quantityDelta' },
+          { status: 400 }
+        );
+      }
+      const current = await Product.findById(id).select('quantity').lean();
+      if (!current) {
+        return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      }
+      const base =
+        typeof current.quantity === 'number' ? current.quantity : 0;
+      update.quantity = Math.max(0, base + Math.floor(quantityDelta));
+    }
+    if (category !== undefined) {
+      if (typeof category !== 'string' || !category.trim()) {
+        return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
+      }
+      const cat = category.trim();
+      update.category = cat;
+      if (cat !== 'clothing') {
+        update.sizes = undefined;
+      }
+    }
+    if (sizes !== undefined) {
+      const cat =
+        (update.category as string) ||
+        (await Product.findById(id).select('category').lean())?.category ||
+        'general';
+      const catStr = typeof cat === 'string' ? cat : 'general';
+      update.sizes = normalizeSizes(catStr, sizes);
+    }
+
+    if (productCodeInput !== undefined) {
+      const raw =
+        typeof productCodeInput === 'string' ? productCodeInput.trim() : '';
+      if (raw && !isValidProductCode(raw)) {
+        return NextResponse.json(
+          { error: 'productCode must be 5–7 digits' },
+          { status: 400 }
+        );
+      }
+      if (raw) {
+        const taken = await Product.findOne({
+          productCode: raw,
+          _id: { $ne: id },
+        }).lean();
+        if (taken) {
+          return NextResponse.json(
+            { error: 'productCode already in use' },
+            { status: 400 }
+          );
+        }
+        update.productCode = raw;
+      }
     }
 
     if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
@@ -96,8 +193,8 @@ export async function PUT(
           { status: 400 }
         );
       }
-      const raw = Buffer.from(await res.arrayBuffer());
-      const { buffer } = await compressImageForClip(raw);
+      const rawBuf = Buffer.from(await res.arrayBuffer());
+      const { buffer } = await compressImageForClip(rawBuf);
       update.image_url = url;
       update.embedding = await getImageEmbeddingFromJpegBuffer(buffer);
     }
@@ -113,12 +210,25 @@ export async function PUT(
       new: true,
       runValidators: true,
     })
-      .select(publicFields)
+      .select(publicSelect)
       .lean();
 
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
+
+    if (!product.productCode) {
+      const code = await ensureUniqueProductCode(Product, null);
+      const withCode = await Product.findByIdAndUpdate(
+        id,
+        { productCode: code },
+        { new: true, runValidators: true }
+      )
+        .select(publicSelect)
+        .lean();
+      return NextResponse.json(withCode);
+    }
+
     return NextResponse.json(product);
   } catch (error: unknown) {
     const message =

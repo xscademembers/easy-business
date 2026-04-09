@@ -43,9 +43,13 @@ export default function AdminProductsPage() {
     }
   };
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const q = search.toLowerCase().trim();
+  const filtered = products.filter((p) => {
+    if (!q) return true;
+    const name = (p.name || '').toLowerCase();
+    const code = String(p.productCode || '').toLowerCase();
+    return name.includes(q) || code.includes(q);
+  });
 
   return (
     <div className="space-y-6">
@@ -61,13 +65,21 @@ export default function AdminProductsPage() {
             OpenAI embeddings + Atlas vector index &quot;vector_index&quot;
           </p>
         </div>
-        <Link
-          href="/admin/products/add"
-          className="btn-primary flex items-center gap-2 shrink-0 self-start"
-        >
-          <Plus size={18} />
-          Add product
-        </Link>
+        <div className="flex flex-wrap gap-2 shrink-0 self-start">
+          <Link
+            href="/admin/products/bulk"
+            className="btn-secondary flex items-center gap-2"
+          >
+            Bulk upload
+          </Link>
+          <Link
+            href="/admin/products/add"
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus size={18} />
+            Add product
+          </Link>
+        </div>
       </div>
 
       <div className="card">

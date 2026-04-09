@@ -5,14 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
 import { useCart } from '@/context/CartContext';
-import { CreditCard, Banknote, CheckCircle, Loader2, ArrowLeft } from 'lucide-react';
+import { Banknote, CheckCircle, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CheckoutPage() {
   const { items, total, clearCart } = useCart();
   const router = useRouter();
   const [form, setForm] = useState({ name: '', phone: '', email: '' });
-  const [paymentType, setPaymentType] = useState<'online' | 'offline'>('offline');
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
@@ -36,7 +35,6 @@ export default function CheckoutPage() {
             price: i.price,
             quantity: i.quantity,
           })),
-          paymentType,
         }),
       });
 
@@ -75,9 +73,8 @@ export default function CheckoutPage() {
               className="mb-8"
               style={{ color: 'var(--text-secondary)' }}
             >
-              {paymentType === 'offline'
-                ? 'Please pay at the store when you collect your items.'
-                : 'Payment completed successfully.'}
+              Please pay in cash (or your agreed in-store method) when you
+              collect your items.
             </p>
             <Link href="/" className="btn-primary inline-flex items-center gap-2">
               Continue Shopping
@@ -204,73 +201,35 @@ export default function CheckoutPage() {
                   className="text-lg font-bold mb-4"
                   style={{ color: 'var(--text-primary)' }}
                 >
-                  Payment Method
+                  Payment
                 </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentType('online')}
-                    className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200"
-                    style={{
-                      borderColor:
-                        paymentType === 'online' ? 'var(--accent)' : 'var(--border)',
-                      backgroundColor:
-                        paymentType === 'online' ? 'var(--accent-light)' : 'transparent',
-                    }}
-                  >
-                    <CreditCard
-                      size={24}
-                      style={{
-                        color:
-                          paymentType === 'online'
-                            ? 'var(--accent)'
-                            : 'var(--text-muted)',
-                      }}
-                    />
-                    <span
-                      className="text-sm font-medium"
-                      style={{
-                        color:
-                          paymentType === 'online'
-                            ? 'var(--accent)'
-                            : 'var(--text-secondary)',
-                      }}
+                <div
+                  className="flex flex-col sm:flex-row items-start gap-4 p-4 rounded-xl border-2"
+                  style={{
+                    borderColor: 'var(--accent)',
+                    backgroundColor: 'var(--accent-light)',
+                  }}
+                >
+                  <Banknote
+                    size={28}
+                    className="shrink-0"
+                    style={{ color: 'var(--accent)' }}
+                  />
+                  <div>
+                    <p
+                      className="font-medium"
+                      style={{ color: 'var(--text-primary)' }}
                     >
-                      Online Payment
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentType('offline')}
-                    className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200"
-                    style={{
-                      borderColor:
-                        paymentType === 'offline' ? 'var(--accent)' : 'var(--border)',
-                      backgroundColor:
-                        paymentType === 'offline' ? 'var(--accent-light)' : 'transparent',
-                    }}
-                  >
-                    <Banknote
-                      size={24}
-                      style={{
-                        color:
-                          paymentType === 'offline'
-                            ? 'var(--accent)'
-                            : 'var(--text-muted)',
-                      }}
-                    />
-                    <span
-                      className="text-sm font-medium"
-                      style={{
-                        color:
-                          paymentType === 'offline'
-                            ? 'var(--accent)'
-                            : 'var(--text-secondary)',
-                      }}
+                      In-store / cash payment only
+                    </p>
+                    <p
+                      className="text-sm mt-2"
+                      style={{ color: 'var(--text-secondary)' }}
                     >
-                      Pay at Store
-                    </span>
-                  </button>
+                      Online card payment is not available. Bring payment when
+                      you pick up your order.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

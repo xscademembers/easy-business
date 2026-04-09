@@ -8,17 +8,30 @@ import {
   Camera as CameraIcon,
   RotateCcw,
   ArrowLeft,
+  ImagePlus,
+  Wand2,
+  SpellCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { VoiceTextButton } from '@/components/VoiceTextButton';
 
 export default function EditProductPage() {
   const { id } = useParams();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [form, setForm] = useState({ name: '', price: '' });
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    price: '',
+    quantity: '0',
+    category: 'general',
+    sizes: '',
+    productCode: '',
+  });
   const [image, setImage] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -26,6 +39,10 @@ export default function EditProductPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [imageDirty, setImageDirty] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
+  const [spellField, setSpellField] = useState<'name' | 'description' | null>(
+    null
+  );
 
   useEffect(() => {
     fetch(`/api/products/${id}`)
@@ -34,7 +51,12 @@ export default function EditProductPage() {
         if (data.error) return;
         setForm({
           name: data.name || '',
+          description: data.description || '',
           price: String(data.price ?? ''),
+          quantity: String(data.quantity ?? 0),
+          category: data.category || 'general',
+          sizes: Array.isArray(data.sizes) ? data.sizes.join(', ') : '',
+          productCode: data.productCode || '',
         });
         setImage(data.image_url || '');
       })
@@ -55,13 +77,18 @@ export default function EditProductPage() {
   const startCamera = async () => {
     try {
       setError('');
+      setCameraActive(true);
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: 640, height: 480 },
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
+        },
       });
       setStream(mediaStream);
-      setCameraActive(true);
     } catch {
       setError('Could not access camera');
+      setCameraActive(false);
     }
   };
 
@@ -93,10 +120,87 @@ export default function EditProductPage() {
     setError('');
   };
 
-  const retakeImage = () => {
-    setImageDirty(true);
+  const onGalleryPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file?.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const res = reader.result;
+      if (typeof res !== 'string') return;
+      try {
+        const compressed = await compressImageDataUrl(res);
+        setImage(compressed);
+        setImageDirty(true);
+        stopCamera();
+        setError('');
+      } catch {
+        setError('Could not process image');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const replaceWithCamera = () => {
     void startCamera();
   };
+
+  const spellcheck = async (field: 'name' | 'description') => {
+    const raw = form[field].trim();
+    if (!raw) return;
+    setSpellField(field);
+    try {
+      const res = await fetch('/api/ai/spellcheck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: raw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Spell check failed');
+      setForm((f) => ({ ...f, [field]: data.corrected || f[field] }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Spell check failed');
+    } finally {
+      setSpellField(null);
+    }
+  };
+
+  const generateDescription = async () => {
+    if (!form.name.trim()) {
+      setError('Add a product name first');
+      return;
+    }
+    setGenLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/ai/generate-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          imageBase64: imageDirty ? image : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not generate');
+      setForm((f) => ({
+        ...f,
+        description: data.description || f.description,
+      }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Generate failed');
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
+  const sizesArray =
+    form.category === 'clothing'
+      ? form.sizes
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,7 +210,12 @@ export default function EditProductPage() {
     try {
       const body: Record<string, unknown> = {
         name: form.name.trim(),
+        description: form.description.trim(),
         price: parseFloat(form.price),
+        quantity: parseInt(form.quantity, 10) || 0,
+        category: form.category.trim() || 'general',
+        sizes: sizesArray,
+        productCode: form.productCode.trim() || undefined,
       };
       if (imageDirty && image) {
         body.imageBase64 = image;
@@ -168,12 +277,8 @@ export default function EditProductPage() {
           >
             Product image
           </h2>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            Capture a new photo to recompute the embedding and update visual
-            search.
-          </p>
           <div
-            className="rounded-xl overflow-hidden aspect-[16/9] relative"
+            className="rounded-xl overflow-hidden aspect-[3/4] max-w-md relative mx-auto"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               border: '2px solid var(--border)',
@@ -194,12 +299,20 @@ export default function EditProductPage() {
                 className="block h-full w-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
+              <div className="w-full h-full flex items-center justify-center min-h-[200px]">
                 <CameraIcon size={48} style={{ color: 'var(--text-muted)' }} />
               </div>
             )}
           </div>
           <canvas ref={canvasRef} className="hidden" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            aria-hidden
+            onChange={onGalleryPick}
+          />
 
           <div className="flex flex-wrap gap-3">
             {cameraActive ? (
@@ -214,17 +327,18 @@ export default function EditProductPage() {
               <>
                 <button
                   type="button"
-                  onClick={() => void startCamera()}
+                  onClick={() => void replaceWithCamera()}
                   className="btn-primary flex items-center gap-2 text-sm"
                 >
                   <CameraIcon size={16} /> New photo from camera
                 </button>
                 <button
                   type="button"
-                  onClick={retakeImage}
+                  onClick={() => fileInputRef.current?.click()}
                   className="btn-secondary flex items-center gap-2 text-sm"
                 >
-                  <RotateCcw size={16} /> Replace with camera
+                  <ImagePlus size={16} />
+                  From gallery
                 </button>
               </>
             )}
@@ -237,12 +351,31 @@ export default function EditProductPage() {
           </h2>
           <div className="grid sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: 'var(--text-secondary)' }}
-              >
-                Name *
-              </label>
+              <div className="flex flex-wrap items-end gap-2 mb-2">
+                <label
+                  className="block text-sm font-medium flex-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Name *
+                </label>
+                <VoiceTextButton
+                  label="Name (mic)"
+                  onText={(t) => setForm((f) => ({ ...f, name: t }))}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary text-xs !py-1.5 !px-2 inline-flex items-center gap-1"
+                  onClick={() => void spellcheck('name')}
+                  disabled={spellField === 'name'}
+                >
+                  {spellField === 'name' ? (
+                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <SpellCheck size={14} />
+                  )}
+                  Spell check
+                </button>
+              </div>
               <input
                 required
                 value={form.name}
@@ -250,6 +383,63 @@ export default function EditProductPage() {
                 className="input-field"
               />
             </div>
+
+            <div className="sm:col-span-2">
+              <div className="flex flex-wrap items-end gap-2 mb-2">
+                <label
+                  className="block text-sm font-medium flex-1"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Description
+                </label>
+                <VoiceTextButton
+                  label="Description (mic)"
+                  onText={(t) =>
+                    setForm((f) => ({
+                      ...f,
+                      description: f.description
+                        ? `${f.description} ${t}`
+                        : t,
+                    }))
+                  }
+                />
+                <button
+                  type="button"
+                  className="btn-secondary text-xs !py-1.5 !px-2 inline-flex items-center gap-1"
+                  onClick={() => void spellcheck('description')}
+                  disabled={spellField === 'description'}
+                >
+                  {spellField === 'description' ? (
+                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <SpellCheck size={14} />
+                  )}
+                  Spell check
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs !py-1.5 !px-2 inline-flex items-center gap-1"
+                  onClick={() => void generateDescription()}
+                  disabled={genLoading}
+                >
+                  {genLoading ? (
+                    <Loader2 size={14} className="animate-spin motion-reduce:animate-none" />
+                  ) : (
+                    <Wand2 size={14} />
+                  )}
+                  Generate description
+                </button>
+              </div>
+              <textarea
+                value={form.description}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
+                className="input-field min-h-[96px] resize-y"
+                rows={4}
+              />
+            </div>
+
             <div>
               <label
                 className="block text-sm font-medium mb-2"
@@ -267,6 +457,79 @@ export default function EditProductPage() {
                 className="input-field"
               />
             </div>
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Quantity
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={form.quantity}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Category *
+              </label>
+              <select
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                className="input-field"
+              >
+                <option value="general">General</option>
+                <option value="clothing">Clothing</option>
+                <option value="electronics">Electronics</option>
+                <option value="home">Home</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                Product code (5–7 digits)
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={form.productCode}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    productCode: e.target.value.replace(/\D/g, '').slice(0, 7),
+                  })
+                }
+                className="input-field"
+              />
+            </div>
+
+            {form.category === 'clothing' && (
+              <div className="sm:col-span-2">
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  Sizes (comma-separated)
+                </label>
+                <input
+                  value={form.sizes}
+                  onChange={(e) => setForm({ ...form, sizes: e.target.value })}
+                  className="input-field"
+                />
+              </div>
+            )}
           </div>
         </div>
 

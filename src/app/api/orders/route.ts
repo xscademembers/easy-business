@@ -19,7 +19,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     await connectDB();
-    const { customer: customerData, items, paymentType } = await request.json();
+    const { customer: customerData, items } = await request.json();
 
     if (!customerData?.name || !customerData?.phone || !customerData?.email) {
       return NextResponse.json({ error: 'Customer details required' }, { status: 400 });
@@ -43,8 +43,8 @@ export async function POST(request: Request) {
       customer: customer._id,
       items,
       totalAmount,
-      paymentType: paymentType || 'offline',
-      paymentStatus: paymentType === 'online' ? 'completed' : 'pending',
+      paymentType: 'offline',
+      paymentStatus: 'pending',
     });
 
     customer.orders.push(order._id);

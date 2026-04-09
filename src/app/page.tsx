@@ -1,22 +1,37 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Navbar } from '@/components/Navbar';
-import { Footer } from '@/components/Footer';
+import { useState, useCallback } from 'react';
 import { Camera } from '@/components/Camera';
-import { Camera as CameraIcon, Search, Sparkles, Loader2 } from 'lucide-react';
+import {
+  ImageSearchResults,
+  type SearchResultProduct,
+} from '@/components/ImageSearchResults';
+import {
+  Camera as CameraIcon,
+  Hash,
+  ArrowLeft,
+  Loader2,
+  Search,
+} from 'lucide-react';
 
 export default function HomePage() {
-  const router = useRouter();
+  const [mode, setMode] = useState<'pick' | 'image' | 'id'>('pick');
   const [searching, setSearching] = useState(false);
-  const [searchId, setSearchId] = useState('');
-  const [showCamera, setShowCamera] = useState(false);
   const [message, setMessage] = useState('');
+  const [products, setProducts] = useState<SearchResultProduct[]>([]);
+  const [similarProducts, setSimilarProducts] = useState<
+    SearchResultProduct[] | undefined
+  >(undefined);
+  const [threshold, setThreshold] = useState<number | undefined>(undefined);
 
-  const handleCapture = async (imageDataUrl: string) => {
+  const [idInput, setIdInput] = useState('');
+
+  const runImageSearch = useCallback(async (imageDataUrl: string) => {
     setSearching(true);
     setMessage('Finding your product…');
+    setProducts([]);
+    setSimilarProducts(undefined);
+    setThreshold(undefined);
     try {
       const res = await fetch('/api/products/search', {
         method: 'POST',
@@ -27,185 +42,203 @@ export default function HomePage() {
       if (!res.ok) {
         throw new Error(data.error || 'Search failed');
       }
-      if (data.products?.length > 0) {
-        setMessage('');
-        router.push(`/product/${data.products[0]._id}`);
-      } else {
-        setMessage('No matching product found. Try a different angle or search by ID.');
-      }
+      setThreshold(
+        typeof data.threshold === 'number' ? data.threshold : undefined
+      );
+      const list = (data.products || []) as SearchResultProduct[];
+      setProducts(list);
+      setSimilarProducts(data.similarProducts as SearchResultProduct[] | undefined);
+      setMessage('');
     } catch (e) {
       setMessage(
         e instanceof Error ? e.message : 'Search failed. Please try again.'
+      );
+      setProducts([]);
+      setSimilarProducts(undefined);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleIdSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = idInput.trim();
+    if (!q) return;
+    setSearching(true);
+    setMessage('');
+    setProducts([]);
+    setSimilarProducts(undefined);
+    setThreshold(undefined);
+    try {
+      const body =
+        /^[0-9a-fA-F]{24}$/.test(q) || /^\d{5,7}$/.test(q)
+          ? { id: q }
+          : { query: q };
+      const res = await fetch('/api/products/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Search failed');
+      }
+      setProducts((data.products || []) as SearchResultProduct[]);
+      if (!data.products?.length) {
+        setMessage('No matching product found.');
+      }
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : 'Search failed. Please try again.'
       );
     } finally {
       setSearching(false);
     }
   };
 
-  const handleIdSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchId.trim()) return;
-    const q = searchId.trim();
-    if (/^[0-9a-fA-F]{24}$/.test(q)) {
-      router.push(`/product/${q}`);
-      return;
-    }
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+  const goPick = () => {
+    setMode('pick');
+    setMessage('');
+    setProducts([]);
+    setSimilarProducts(undefined);
+    setThreshold(undefined);
+    setIdInput('');
   };
 
   return (
-    <>
-      <Navbar />
-      <main>
-        <section
-          className="relative overflow-hidden"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--gradient-start), var(--gradient-end))',
-          }}
-        >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
-            <div className="grid md:grid-cols-2 gap-12 items-center">
-              <div className="space-y-6">
-                <div
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium"
-                  style={{
-                    backgroundColor: 'var(--accent-light)',
-                    color: 'var(--accent)',
-                  }}
-                >
-                  <Sparkles size={14} />
-                  Visual product search
-                </div>
-
-                <h1
-                  className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight"
-                  style={{ color: 'var(--text-primary)' }}
-                >
-                  Scan. Match.{' '}
-                  <span style={{ color: 'var(--accent)' }}>Shop.</span>
-                </h1>
-
-                <p
-                  className="text-lg md:text-xl leading-relaxed max-w-lg"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  Take a photo and we&apos;ll match it to the closest product in
-                  the catalog using OpenAI vision and text embeddings.
-                </p>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setShowCamera(!showCamera)}
-                    className="btn-primary flex items-center gap-2"
-                  >
-                    <CameraIcon size={18} />
-                    {showCamera ? 'Hide Camera' : 'Scan Product'}
-                  </button>
-                  <a
-                    href="#search"
-                    className="btn-secondary flex items-center gap-2"
-                  >
-                    <Search size={18} />
-                    Search by ID or name
-                  </a>
-                </div>
-              </div>
-
-              {showCamera && (
-                <div className="card min-w-0 w-full">
-                  <Camera onCapture={handleCapture} loading={searching} />
-                  {message && (
-                    <div
-                      className="mt-4 px-4 py-3 rounded-xl flex flex-col items-center gap-3"
-                      style={{
-                        backgroundColor: 'var(--accent-light)',
-                        color: 'var(--accent)',
-                      }}
-                    >
-                      {searching && (
-                        <Loader2
-                          className="animate-spin motion-reduce:animate-none shrink-0"
-                          size={24}
-                          aria-hidden
-                        />
-                      )}
-                      <p className="text-sm text-center">{message}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!showCamera && (
-                <div className="hidden md:flex items-center justify-center">
-                  <div
-                    className="w-64 h-64 rounded-3xl flex items-center justify-center"
-                    style={{
-                      backgroundColor: 'var(--accent-light)',
-                      border: '2px dashed var(--accent)',
-                    }}
-                  >
-                    <div className="text-center space-y-3">
-                      <CameraIcon
-                        size={56}
-                        style={{ color: 'var(--accent)' }}
-                        className="mx-auto"
-                      />
-                      <p
-                        className="text-sm font-medium"
-                        style={{ color: 'var(--accent)' }}
-                      >
-                        Click &quot;Scan Product&quot; to start
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-
-        <section
-          id="search"
-          className="py-16"
-          style={{ backgroundColor: 'var(--bg-primary)' }}
-        >
-          <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-8">
-              <h2
-                className="text-2xl md:text-3xl font-bold mb-3"
-                style={{ color: 'var(--text-primary)' }}
-              >
-                Search by product ID or name
-              </h2>
-              <p style={{ color: 'var(--text-secondary)' }}>
-                Enter a MongoDB product ID (24 hex characters) or part of the
-                product name
-              </p>
-            </div>
-            <form
-              onSubmit={handleIdSearch}
-              className="flex flex-col sm:flex-row gap-3"
+    <main
+      className="min-h-screen flex flex-col px-4 py-8"
+      style={{ backgroundColor: 'var(--bg-primary)' }}
+    >
+      {mode === 'pick' && (
+        <div className="flex-1 flex flex-col items-center justify-center gap-8 max-w-md mx-auto w-full">
+          <h1
+            className="text-xl font-semibold text-center"
+            style={{ color: 'var(--text-primary)' }}
+          >
+            Easy Business
+          </h1>
+          <div className="flex flex-col gap-4 w-full">
+            <button
+              type="button"
+              className="btn-primary w-full min-h-[56px] text-base flex items-center justify-center gap-3"
+              onClick={() => setMode('image')}
             >
-              <input
-                type="text"
-                value={searchId}
-                onChange={(e) => setSearchId(e.target.value)}
-                placeholder="Product ID or name"
-                className="input-field flex-1"
-              />
-              <button
-                type="submit"
-                className="btn-primary flex items-center justify-center gap-2 shrink-0"
-              >
-                <Search size={18} />
-                Search
-              </button>
-            </form>
+              <CameraIcon size={22} aria-hidden />
+              Search by Image
+            </button>
+            <button
+              type="button"
+              className="btn-secondary w-full min-h-[56px] text-base flex items-center justify-center gap-3"
+              onClick={() => setMode('id')}
+            >
+              <Hash size={22} aria-hidden />
+              Search by Product ID
+            </button>
           </div>
-        </section>
-      </main>
-      <Footer />
-    </>
+        </div>
+      )}
+
+      {mode === 'image' && (
+        <div className="flex-1 flex flex-col items-stretch max-w-lg mx-auto w-full gap-6">
+          <button
+            type="button"
+            onClick={goPick}
+            className="self-start inline-flex items-center gap-2 text-sm font-medium min-h-[40px]"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            <ArrowLeft size={18} aria-hidden />
+            Back
+          </button>
+          <Camera
+            onCapture={runImageSearch}
+            loading={searching}
+            variant="portrait"
+            showGallery
+            lockOrientation
+          />
+          {message && (
+            <div
+              className="rounded-2xl px-4 py-4 flex items-center justify-center gap-3"
+              style={{
+                backgroundColor: 'var(--accent-light)',
+                color: 'var(--accent)',
+              }}
+              role="status"
+            >
+              {searching && (
+                <Loader2
+                  className="animate-spin motion-reduce:animate-none shrink-0"
+                  size={24}
+                  aria-hidden
+                />
+              )}
+              <p className="text-sm text-center">{message}</p>
+            </div>
+          )}
+          <ImageSearchResults
+            products={products}
+            similarProducts={similarProducts}
+            threshold={threshold}
+          />
+        </div>
+      )}
+
+      {mode === 'id' && (
+        <div className="flex-1 flex flex-col max-w-lg mx-auto w-full gap-6">
+          <button
+            type="button"
+            onClick={goPick}
+            className="self-start inline-flex items-center gap-2 text-sm font-medium min-h-[40px]"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            <ArrowLeft size={18} aria-hidden />
+            Back
+          </button>
+          <form onSubmit={handleIdSearch} className="space-y-4">
+            <label
+              htmlFor="product-id-search"
+              className="block text-sm font-medium"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              Product ID (5–7 digit code or catalog ID) or name
+            </label>
+            <input
+              id="product-id-search"
+              type="search"
+              value={idInput}
+              onChange={(e) => setIdInput(e.target.value)}
+              className="input-field w-full"
+              placeholder="e.g. 4829101"
+              autoComplete="off"
+            />
+            <button
+              type="submit"
+              disabled={searching || !idInput.trim()}
+              className="btn-primary w-full min-h-[48px] flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {searching ? (
+                <Loader2 className="animate-spin motion-reduce:animate-none" size={20} />
+              ) : (
+                <Search size={20} aria-hidden />
+              )}
+              Search
+            </button>
+          </form>
+          {message && (
+            <p
+              className="text-sm text-center px-2"
+              style={{ color: 'var(--warning)' }}
+              role="status"
+            >
+              {message}
+            </p>
+          )}
+          {products.length > 0 && (
+            <ImageSearchResults products={products} />
+          )}
+        </div>
+      )}
+    </main>
   );
 }

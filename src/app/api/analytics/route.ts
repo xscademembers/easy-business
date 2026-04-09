@@ -38,11 +38,22 @@ export async function GET() {
         0
       );
 
+    const orderCount = allOrders.length;
+    const itemsSoldAll = calcItemsSold(allOrders);
+    const avgItemsPerOrder =
+      orderCount > 0 ? itemsSoldAll / orderCount : 0;
+    const avgOrderValue =
+      orderCount > 0
+        ? allOrders.reduce((s, o) => s + (o.totalAmount || 0), 0) / orderCount
+        : 0;
+
     return NextResponse.json({
       totalProducts,
       totalCustomers,
-      totalOrders: allOrders.length,
+      totalOrders: orderCount,
       totalRevenue: calcRevenue(allOrders),
+      avgItemsPerOrder,
+      avgOrderValue,
       daily: {
         orders: dailyOrders.length,
         revenue: calcRevenue(dailyOrders),

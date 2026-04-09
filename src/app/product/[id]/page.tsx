@@ -25,6 +25,11 @@ export default function ProductPage() {
     name: string;
     price: number;
     image_url?: string;
+    description?: string;
+    quantity?: number;
+    productCode?: string;
+    category?: string;
+    sizes?: string[];
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -121,8 +126,35 @@ export default function ProductPage() {
                 className="text-sm mt-2 font-mono truncate"
                 style={{ color: 'var(--text-muted)' }}
               >
-                ID: {product._id}
+                {product.productCode
+                  ? `Product code: ${product.productCode}`
+                  : `ID: ${product._id}`}
               </p>
+              {product.description ? (
+                <p
+                  className="mt-4 text-base leading-relaxed"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {product.description}
+                </p>
+              ) : null}
+              <p className="mt-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                In stock:{' '}
+                <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {product.quantity ?? 0}
+                </span>
+                {product.category ? (
+                  <>
+                    {' '}
+                    · <span className="capitalize">{product.category}</span>
+                  </>
+                ) : null}
+              </p>
+              {product.sizes && product.sizes.length > 0 && (
+                <p className="mt-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                  Sizes: {product.sizes.join(', ')}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-baseline gap-3">

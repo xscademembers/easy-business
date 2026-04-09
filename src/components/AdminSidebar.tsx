@@ -7,7 +7,6 @@ import {
   Package,
   BarChart3,
   Users,
-  MessageSquare,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -22,7 +21,6 @@ const navItems = [
   { href: '/admin/products', label: 'Products', icon: Package },
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/customers', label: 'Customers', icon: Users },
-  { href: '/admin/contacts', label: 'Messages', icon: MessageSquare },
 ];
 
 interface AdminSidebarProps {
