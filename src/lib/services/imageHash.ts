@@ -6,21 +6,25 @@ import { HASH_ROTATIONS_DEG } from '@/lib/constants/duplicateDetection';
  * dHash is robust to brightness/contrast shifts and small crops, which makes
  * it a reliable "exact duplicate" fingerprint for re-uploads of the same
  * product photo (identical or near-identical pixels).
+ *
+ * Implemented byte-by-byte (no BigInt) so it compiles under ES2017.
  */
 export function dHashFromGrayscale9x8(gray: Buffer): string {
   if (gray.length !== 72) {
     throw new Error(`dHash expects 9×8 grayscale (72 bytes), got ${gray.length}`);
   }
-  let hash = 0n;
+  let hex = '';
   for (let y = 0; y < 8; y++) {
     const row = y * 9;
+    let byte = 0;
     for (let x = 0; x < 8; x++) {
       const left = gray[row + x]!;
       const right = gray[row + x + 1]!;
-      hash = (hash << 1n) | (left < right ? 1n : 0n);
+      byte = ((byte << 1) | (left < right ? 1 : 0)) & 0xff;
     }
+    hex += byte.toString(16).padStart(2, '0');
   }
-  return hash.toString(16).padStart(16, '0');
+  return hex;
 }
 
 /**
@@ -44,15 +48,26 @@ export async function dHashAllRotations(squareJpeg: Buffer): Promise<string[]> {
   return Array.from(new Set(hashes));
 }
 
+/**
+ * Population-count (Hamming weight) of an 8-bit value.
+ * Branch-free, ES5-compatible.
+ */
+function popcount8(v: number): number {
+  let x = v & 0xff;
+  x = x - ((x >> 1) & 0x55);
+  x = (x & 0x33) + ((x >> 2) & 0x33);
+  return (x + (x >> 4)) & 0x0f;
+}
+
 /** Hamming distance between two 16-hex-char dHash strings (0..64). */
 export function hashDistance(a: string, b: string): number {
   if (a.length !== 16 || b.length !== 16) return 64;
-  const x = BigInt('0x' + a) ^ BigInt('0x' + b);
-  let v = x;
   let count = 0;
-  while (v !== 0n) {
-    v &= v - 1n;
-    count++;
+  for (let i = 0; i < 16; i += 2) {
+    const av = parseInt(a.slice(i, i + 2), 16);
+    const bv = parseInt(b.slice(i, i + 2), 16);
+    if (Number.isNaN(av) || Number.isNaN(bv)) return 64;
+    count += popcount8(av ^ bv);
   }
   return count;
 }
