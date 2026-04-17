@@ -340,46 +340,62 @@ export default function AddProductPage() {
       return;
     }
 
-    setCheckingSimilar(true);
-    setError('');
-    try {
-      const res = await fetch('/api/products/similar-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: image, extractCodes: true }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(
-          typeof data.error === 'string'
-            ? data.error
-            : 'Could not verify duplicates. Check your connection and try again.'
-        );
-      }
-      setSimilarMeta({
-        duplicateCandidate: data.duplicateCandidate ?? null,
-        codeMatch: data.codeMatch ?? similarMeta?.codeMatch ?? null,
-      });
-      if (
-        data.duplicateCandidate &&
-        !userChoseNewProduct &&
-        !opts?.fromIgnoredCode
-      ) {
+    // Trust the cached result from the auto-check that ran 500 ms after the
+    // image was captured — the image hasn't changed since, so a second
+    // round-trip would just double the perceived "checking" delay (the main
+    // source of the save-time wait the user saw).
+    let cached = similarMeta;
+
+    // Safety fallback: if the user hammered the save button inside the
+    // 500 ms debounce window before the auto-check even started, do the
+    // check now so we never silently skip duplicate detection.
+    if (!cached) {
+      setCheckingSimilar(true);
+      setError('');
+      try {
+        const res = await fetch('/api/products/similar-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: image, extractCodes: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === 'string'
+              ? data.error
+              : 'Could not verify duplicates. Check your connection and try again.'
+          );
+        }
+        cached = {
+          duplicateCandidate: data.duplicateCandidate ?? null,
+          codeMatch: data.codeMatch ?? null,
+        };
+        setSimilarMeta(cached);
+      } catch (err) {
         setError(
-          'This photo matches an existing item. Use Yes or No under your photo, or change the image.'
+          err instanceof Error
+            ? err.message
+            : 'Could not verify duplicates. Try again.'
         );
         return;
+      } finally {
+        setCheckingSimilar(false);
       }
-      await createProduct();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not verify duplicates. Try again.'
-      );
-    } finally {
-      setCheckingSimilar(false);
     }
+
+    if (
+      cached?.duplicateCandidate &&
+      !userChoseNewProduct &&
+      !opts?.fromIgnoredCode
+    ) {
+      setError(
+        'This photo matches an existing item. Use Yes or No under your photo, or change the image.'
+      );
+      return;
+    }
+
+    setError('');
+    await createProduct();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

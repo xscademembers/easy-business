@@ -22,22 +22,30 @@ type PublicProduct = Record<string, unknown> & { _id: unknown };
 /**
  * Duplicate detection endpoint.
  *
- * Latency budget (<3 s p95):
+ * Pipeline:
  *   1. Normalize image (sharp, ~50 ms).
- *   2. Canonical dHash lookup — O(index) exact match against the 4 rotation
- *      hashes stored on every product, so a re-upload (even rotated) returns
- *      instantly with **zero** OpenAI calls.
- *   3. Otherwise run ONE vision call + ONE embedding call + ONE $vectorSearch
- *      in parallel with OCR. Past experiments with 4-rotation vision fan-out
- *      triggered OpenAI org concurrency limits and stretched this endpoint to
- *      15–30 s, so we keep the fan-out tight here.
- *   4. Strict same-product gate: cosine ≥ threshold AND no identity-defining
- *      attribute contradictions (product_type, primary_color, brand, pattern,
- *      logo_text). Colour / pattern variants therefore stay "new".
- *   5. `duplicateCandidate` is only populated when status === "same" so the
- *      admin popup never fires for variants.
+ *   2. Kick off in parallel: dHash lookup, single-vision fingerprint, and
+ *      OCR. Previously the hash lookup blocked the fingerprint call; racing
+ *      them shaves ~1 vision call worth of wall time off the uncached path
+ *      without changing the contract.
+ *   3. If the hash hits, return `status: "same"` immediately — the
+ *      in-flight fingerprint / OCR calls are discarded (cheap in JS; only
+ *      the OpenAI tokens are wasted, which is an acceptable trade for the
+ *      happy-path latency).
+ *   4. Otherwise run ONE $vectorSearch, then apply the strict attribute
+ *      gate (product_type / primary_color / brand / pattern / logo_text).
+ *      Colour variants always fail the gate because the vision prompt now
+ *      forces a dominant-colour choice from a fixed palette.
+ *   5. `duplicateCandidate` is populated only when status === "same" so
+ *      the admin popup never fires for variants.
  */
 export async function POST(request: Request) {
+  const t0 = Date.now();
+  const timings: Record<string, number> = {};
+  const mark = (label: string, start: number) => {
+    timings[label] = Date.now() - start;
+  };
+
   try {
     await connectDB();
     const body = await request.json();
@@ -53,21 +61,61 @@ export async function POST(request: Request) {
       );
     }
 
+    const tNorm = Date.now();
     const normalized = await normalizeProductImage(imageBase64);
+    mark('normalize_ms', tNorm);
+
     const canonicalHash = dHashFromGrayscale9x8(normalized.grayHash);
     const threshold = getSameProductMinScore();
 
-    // Stage 1 — exact hash match (rotation-invariant by construction because
-    // products store all 4 rotation dHashes in `imageHashes`).
-    const hashMatch = (await Product.findOne({ imageHashes: canonicalHash })
+    // Fire off all three expensive tasks simultaneously. The hash lookup is
+    // cheap (indexed) — if it wins we'll return before the others finish.
+    const tHash = Date.now();
+    const hashPromise = Product.findOne({ imageHashes: canonicalHash })
       .select(publicSelect)
-      .lean()) as PublicProduct | null;
+      .lean()
+      .then((res) => {
+        mark('hash_lookup_ms', tHash);
+        return res as PublicProduct | null;
+      });
 
+    const tFp = Date.now();
+    const fingerprintPromise = buildImageFingerprint(normalized.buffer)
+      .then((fp) => {
+        mark('fingerprint_ms', tFp);
+        return fp;
+      })
+      .catch((err: unknown) => {
+        mark('fingerprint_ms', tFp);
+        console.warn(
+          'similar-check fingerprint failed:',
+          err instanceof Error ? err.message : err
+        );
+        return null;
+      });
+
+    const tOcr = Date.now();
+    const ocrPromise = (
+      extractCodes
+        ? extractDigitCodesFromJpegBuffer(normalized.buffer)
+        : Promise.resolve<string[]>([])
+    ).then((codes) => {
+      mark('ocr_ms', tOcr);
+      return codes;
+    });
+
+    // Stage 1 — exact hash match (rotation-invariant by construction since
+    // products store all 4 rotation dHashes). Return fast, drop fingerprint.
+    const hashMatch = await hashPromise;
     if (hashMatch) {
       const matched: PublicProduct & { similarityScore: number } = {
         ...hashMatch,
         similarityScore: 1,
       };
+      // Still await OCR so the admin restock flow works on hash hits too.
+      const ocrCodes = await ocrPromise.catch(() => [] as string[]);
+      const codeMatch = await findCodeMatch(ocrCodes);
+      timings.total_ms = Date.now() - t0;
       return NextResponse.json({
         status: 'same',
         confidence: 1,
@@ -75,27 +123,43 @@ export async function POST(request: Request) {
         reason: 'hash exact match',
         duplicateCandidate: matched,
         nearestNeighbors: [],
-        ocrCodes: [],
-        codeMatch: null,
+        ocrCodes,
+        codeMatch,
         duplicateThreshold: threshold,
+        timings,
       });
     }
 
-    // Stage 2 — single vision + embedding + OCR, all concurrent.
-    const ocrPromise = extractCodes
-      ? extractDigitCodesFromJpegBuffer(normalized.buffer)
-      : Promise.resolve<string[]>([]);
-
+    // Stage 2 — wait for the vision fingerprint + OCR.
     const [fingerprint, ocrCodes] = await Promise.all([
-      buildImageFingerprint(normalized.buffer),
+      fingerprintPromise,
       ocrPromise,
     ]);
 
+    if (!fingerprint) {
+      timings.total_ms = Date.now() - t0;
+      const codeMatch = await findCodeMatch(ocrCodes);
+      return NextResponse.json({
+        status: 'new',
+        confidence: 0,
+        matchedProduct: null,
+        reason: 'vision fingerprint failed',
+        duplicateCandidate: null,
+        nearestNeighbors: [],
+        ocrCodes,
+        codeMatch,
+        duplicateThreshold: threshold,
+        timings,
+      });
+    }
+
+    const tVec = Date.now();
     const hits = await findNearestProductsWithAttributes(
       fingerprint.embedding,
       FAST_VECTOR_LIMIT,
       FAST_VECTOR_NUM_CANDIDATES
     );
+    mark('vector_search_ms', tVec);
 
     const ranked = [...hits].sort((a, b) => b.score - a.score);
     const top = ranked[0];
@@ -127,6 +191,8 @@ export async function POST(request: Request) {
       }
     }
 
+    timings.total_ms = Date.now() - t0;
+
     return NextResponse.json({
       status: decision.status,
       confidence: decision.confidence,
@@ -140,16 +206,18 @@ export async function POST(request: Request) {
         price: h.price,
         image_url: h.image_url,
         score: h.score,
+        attributes: h.attributes,
       })),
       ocrCodes,
       codeMatch,
       duplicateThreshold: threshold,
+      timings,
     });
   } catch (error) {
     console.error('POST /api/products/similar-check error:', error);
     const message =
       error instanceof Error ? error.message : 'Similar check failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message, timings }, { status: 500 });
   }
 }
 
