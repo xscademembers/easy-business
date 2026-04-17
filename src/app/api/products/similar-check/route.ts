@@ -3,7 +3,7 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { normalizeProductImage } from '@/lib/services/imageNormalize';
 import { dHashFromGrayscale9x8 } from '@/lib/services/imageHash';
-import { buildRotationQueryVectors } from '@/lib/services/multiRotationFingerprint';
+import { buildImageFingerprint } from '@/lib/services/openaiImageEmbedding';
 import { findNearestProductsWithAttributes } from '@/lib/services/vectorSearch';
 import { extractDigitCodesFromJpegBuffer } from '@/lib/services/extractDigitCodesFromImage';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
@@ -12,7 +12,6 @@ import {
   FAST_VECTOR_NUM_CANDIDATES,
   decideSameProduct,
   getSameProductMinScore,
-  type ProductAttributes,
   type SameProductDecision,
 } from '@/lib/constants/duplicateDetection';
 
@@ -20,31 +19,23 @@ const publicSelect = PRODUCT_PUBLIC_FIELDS;
 
 type PublicProduct = Record<string, unknown> & { _id: unknown };
 
-interface BestMatch {
-  _id: unknown;
-  name: string;
-  price: number;
-  image_url: string;
-  attributes: ProductAttributes;
-  score: number;
-}
-
 /**
  * Duplicate detection endpoint.
  *
- * Pipeline (designed to hit <2 s p95):
- *   1. Normalize the image (auto-orient + 384² letterbox + q55).
- *   2. Compute canonical dHash. If any existing product stores the same
- *      hash (at any of its 4 rotations) we have a byte-level duplicate:
- *      return status="same" with confidence 1.0 — no vision/vector calls.
- *   3. Otherwise run a 4-rotation vision fingerprint (parallel vision calls
- *      + one batched embeddings call) and run 4 parallel vector searches.
- *      The max-similarity hit decides the outcome.
- *   4. Apply the strict same-product rule (cosine ≥ 0.97 AND matching
- *      product_type/primary_color/brand/pattern/logo_text).
- *   5. `duplicateCandidate` is populated **only** when status="same",
- *      which is the signal the admin UI uses to show the popup. Variants
- *      and different products therefore never trigger the popup.
+ * Latency budget (<3 s p95):
+ *   1. Normalize image (sharp, ~50 ms).
+ *   2. Canonical dHash lookup — O(index) exact match against the 4 rotation
+ *      hashes stored on every product, so a re-upload (even rotated) returns
+ *      instantly with **zero** OpenAI calls.
+ *   3. Otherwise run ONE vision call + ONE embedding call + ONE $vectorSearch
+ *      in parallel with OCR. Past experiments with 4-rotation vision fan-out
+ *      triggered OpenAI org concurrency limits and stretched this endpoint to
+ *      15–30 s, so we keep the fan-out tight here.
+ *   4. Strict same-product gate: cosine ≥ threshold AND no identity-defining
+ *      attribute contradictions (product_type, primary_color, brand, pattern,
+ *      logo_text). Colour / pattern variants therefore stay "new".
+ *   5. `duplicateCandidate` is only populated when status === "same" so the
+ *      admin popup never fires for variants.
  */
 export async function POST(request: Request) {
   try {
@@ -66,13 +57,13 @@ export async function POST(request: Request) {
     const canonicalHash = dHashFromGrayscale9x8(normalized.grayHash);
     const threshold = getSameProductMinScore();
 
-    // Stage 1 — exact hash match (rotation-invariant by construction).
+    // Stage 1 — exact hash match (rotation-invariant by construction because
+    // products store all 4 rotation dHashes in `imageHashes`).
     const hashMatch = (await Product.findOne({ imageHashes: canonicalHash })
       .select(publicSelect)
       .lean()) as PublicProduct | null;
 
     if (hashMatch) {
-      // Confident match already; skip everything else to keep this path fast.
       const matched: PublicProduct & { similarityScore: number } = {
         ...hashMatch,
         similarityScore: 1,
@@ -82,7 +73,6 @@ export async function POST(request: Request) {
         confidence: 1,
         matchedProduct: matched,
         reason: 'hash exact match',
-        // Legacy fields — kept so existing UI code works unchanged.
         duplicateCandidate: matched,
         nearestNeighbors: [],
         ocrCodes: [],
@@ -91,50 +81,24 @@ export async function POST(request: Request) {
       });
     }
 
-    // Stage 2 — 4-rotation vision fingerprint + OCR in parallel.
+    // Stage 2 — single vision + embedding + OCR, all concurrent.
     const ocrPromise = extractCodes
       ? extractDigitCodesFromJpegBuffer(normalized.buffer)
       : Promise.resolve<string[]>([]);
 
     const [fingerprint, ocrCodes] = await Promise.all([
-      buildRotationQueryVectors(normalized.buffer),
+      buildImageFingerprint(normalized.buffer),
       ocrPromise,
     ]);
 
-    // Run a $vectorSearch per rotation in parallel, then keep only the
-    // single best hit per product id across all rotations.
-    const perRotationHits = await Promise.all(
-      fingerprint.rotationEmbeddings.map((vec) =>
-        findNearestProductsWithAttributes(
-          vec,
-          FAST_VECTOR_LIMIT,
-          FAST_VECTOR_NUM_CANDIDATES
-        )
-      )
+    const hits = await findNearestProductsWithAttributes(
+      fingerprint.embedding,
+      FAST_VECTOR_LIMIT,
+      FAST_VECTOR_NUM_CANDIDATES
     );
 
-    const bestPerProduct = new Map<string, BestMatch>();
-    for (const hits of perRotationHits) {
-      for (const h of hits) {
-        const key = String(h._id);
-        const current = bestPerProduct.get(key);
-        if (!current || h.score > current.score) {
-          bestPerProduct.set(key, {
-            _id: h._id,
-            name: h.name,
-            price: h.price,
-            image_url: h.image_url,
-            attributes: h.attributes,
-            score: h.score,
-          });
-        }
-      }
-    }
-
-    const rankedHits = Array.from(bestPerProduct.values()).sort(
-      (a, b) => b.score - a.score
-    );
-    const top = rankedHits[0];
+    const ranked = [...hits].sort((a, b) => b.score - a.score);
+    const top = ranked[0];
     const codeMatch = await findCodeMatch(ocrCodes);
 
     let decision: SameProductDecision = {
@@ -169,10 +133,8 @@ export async function POST(request: Request) {
       matchedProduct,
       reason: decision.reason,
       queryAttributes: fingerprint.attributes,
-      // Legacy fields — only expose `duplicateCandidate` when we're truly
-      // confident, so the admin popup stays strict.
       duplicateCandidate: matchedProduct,
-      nearestNeighbors: rankedHits.slice(0, 3).map((h) => ({
+      nearestNeighbors: ranked.slice(0, 3).map((h) => ({
         _id: h._id,
         name: h.name,
         price: h.price,
@@ -204,4 +166,3 @@ async function findCodeMatch(
   }
   return null;
 }
-

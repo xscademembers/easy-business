@@ -9,11 +9,20 @@ function clampUnit(n: number, fallback: number): number {
   return Math.min(1, Math.max(0, n));
 }
 
-/** Vector cosine similarity required to even consider two items as "same". */
+/**
+ * Vector cosine similarity required to even consider two items as "same".
+ *
+ * We keep the cosine floor moderate (0.90) rather than extreme (0.97) because
+ * the real strict signal is the attribute gate in `decideSameProduct` — it
+ * already blocks color / pattern / brand / type / logo mismatches. Raising
+ * the cosine floor higher would only reject same-product photos taken from a
+ * different angle (they typically land in the 0.88–0.94 range), which is the
+ * exact false-negative we want to avoid.
+ */
 export function getSameProductMinScore(): number {
   const raw = process.env.SAME_PRODUCT_MIN_SCORE?.trim();
-  if (!raw) return 0.97;
-  return clampUnit(Number.parseFloat(raw), 0.97);
+  if (!raw) return 0.9;
+  return clampUnit(Number.parseFloat(raw), 0.9);
 }
 
 /**

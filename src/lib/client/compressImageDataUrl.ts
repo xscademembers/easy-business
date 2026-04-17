@@ -40,11 +40,12 @@ export function compressImageDataUrl(
 }
 
 /**
- * Tight preset used by visual-match flows (product upload, similar-check,
- * visual search). Matches the server-side canonicalisation: 384 px longest
- * side at JPEG quality 0.55 — small enough to hit the <2 s upload target
- * without noticeably hurting recognition accuracy.
+ * Preset used by visual-match flows (product upload, similar-check, visual
+ * search). 640 px @ q0.78 keeps the uploaded payload small (~60–80 KB) while
+ * producing a crisp on-screen preview — the server canonicalises to 384²
+ * internally for hashing / vision, so there's no benefit to pre-shrinking the
+ * client-side copy below display size (which was causing the blurry preview).
  */
 export function compressImageForVisualMatch(dataUrl: string): Promise<string> {
-  return compressImageDataUrl(dataUrl, 384, 0.55);
+  return compressImageDataUrl(dataUrl, 640, 0.78);
 }

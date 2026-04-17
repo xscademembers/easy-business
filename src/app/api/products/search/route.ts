@@ -3,7 +3,7 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { normalizeProductImage } from '@/lib/services/imageNormalize';
 import { dHashFromGrayscale9x8 } from '@/lib/services/imageHash';
-import { buildRotationQueryVectors } from '@/lib/services/multiRotationFingerprint';
+import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
 import { findNearestProductsByEmbedding } from '@/lib/services/vectorSearch';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
 import {
@@ -111,55 +111,30 @@ export async function POST(request: Request) {
         });
       }
 
-      // Rotation-invariant query: generate embeddings for 0°/90°/180°/270°
-      // in one batched call, then run the $vectorSearch per rotation in
-      // parallel and keep the best hit per product id.
-      const fingerprint = await buildRotationQueryVectors(normalized.buffer);
-      const perRotationHits = await Promise.all(
-        fingerprint.rotationEmbeddings.map((vec) =>
-          findNearestProductsByEmbedding(
-            vec,
-            FAST_VECTOR_LIMIT,
-            FAST_VECTOR_NUM_CANDIDATES
-          )
-        )
+      // Single vision + embedding call, then one $vectorSearch. Rotation
+      // invariance is handled by the hash fast-path above (products store
+      // all 4 rotation dHashes). Fan-out here is kept tight to avoid OpenAI
+      // concurrency limits that previously blew latency past 15 s.
+      const embedding = await getImageEmbeddingFromJpegBuffer(normalized.buffer);
+      const hits = await findNearestProductsByEmbedding(
+        embedding,
+        FAST_VECTOR_LIMIT,
+        FAST_VECTOR_NUM_CANDIDATES
       );
 
-      const bestPerProduct = new Map<
-        string,
-        {
-          _id: unknown;
-          name: string;
-          price: number;
-          image_url: string;
-          score: number;
-        }
-      >();
-      for (const hits of perRotationHits) {
-        for (const h of hits) {
-          const key = String(h._id);
-          const normScore = normalizeVectorMatchScore(h.score);
-          const current = bestPerProduct.get(key);
-          if (!current || normScore > current.score) {
-            bestPerProduct.set(key, {
-              _id: h._id,
-              name: h.name,
-              price: h.price,
-              image_url: h.image_url,
-              score: normScore,
-            });
-          }
-        }
-      }
+      const ranked = hits
+        .map((h) => ({
+          _id: h._id,
+          name: h.name,
+          price: h.price,
+          image_url: h.image_url,
+          score: normalizeVectorMatchScore(h.score),
+        }))
+        .sort((a, b) => b.score - a.score);
 
-      const ranked = Array.from(bestPerProduct.values()).sort(
-        (a, b) => b.score - a.score
-      );
-
-      // Always return the closest 3 — even when nothing clears the soft
-      // threshold — so users with rotated / off-angle photos still see
-      // something meaningful. The `threshold` field lets the UI label
-      // "strong" vs "suggested" matches when it wants to.
+      // Always surface the top 3 even below the soft threshold so a rotated
+      // / off-angle photo still gets a useful response. The UI uses
+      // `matchType` to distinguish "strong" from "suggested" matches.
       const topN = ranked.slice(0, 3);
       const threshold = getVectorMatchMinScore();
       const products = await hydrateHitsWithDocs(topN);

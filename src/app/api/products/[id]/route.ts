@@ -6,7 +6,7 @@ import {
   dHashAllRotations,
   dHashFromGrayscale9x8,
 } from '@/lib/services/imageHash';
-import { buildMultiRotationFingerprint } from '@/lib/services/multiRotationFingerprint';
+import { buildImageFingerprint } from '@/lib/services/openaiImageEmbedding';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
 import {
   ensureUniqueProductCode,
@@ -206,13 +206,13 @@ export async function PUT(
     }
 
     if (normalizedImage) {
-      // Recompute the 4-rotation fingerprint + rotation hashes + attributes
-      // together so the stored record remains internally consistent on
-      // image replacement.
+      // Recompute dHashes + single-pass vision fingerprint + attributes in
+      // parallel so the stored record stays internally consistent on image
+      // replacement, without inflating OpenAI fan-out.
       const canonicalHash = dHashFromGrayscale9x8(normalizedImage.grayHash);
       const [rotationHashes, fingerprint] = await Promise.all([
         dHashAllRotations(normalizedImage.buffer),
-        buildMultiRotationFingerprint(normalizedImage.buffer),
+        buildImageFingerprint(normalizedImage.buffer),
       ]);
       update.imageHashes = Array.from(
         new Set([canonicalHash, ...rotationHashes])
