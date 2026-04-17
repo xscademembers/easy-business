@@ -8,10 +8,14 @@
 
 export function getVectorMatchMinScore(): number {
   const raw = process.env.VECTOR_MATCH_MIN_SCORE?.trim();
-  /** Only ~90%+ similarity (normalized) counts as a customer-visible match. */
-  if (!raw) return 0.9;
+  /**
+   * Customer-facing visual search floor. Lowered to 0.85 so rotated /
+   * different-angle photos still surface results — the UI ranks by score
+   * so lower-confidence matches naturally appear after strong ones.
+   */
+  if (!raw) return 0.85;
   const n = Number.parseFloat(raw);
-  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.9;
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.85;
 }
 
 /**

@@ -6,9 +6,7 @@ import {
   dHashAllRotations,
   dHashFromGrayscale9x8,
 } from '@/lib/services/imageHash';
-import {
-  buildImageFingerprint,
-} from '@/lib/services/openaiImageEmbedding';
+import { buildMultiRotationFingerprint } from '@/lib/services/multiRotationFingerprint';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
 import {
   ensureUniqueProductCode,
@@ -161,13 +159,14 @@ export async function POST(request: Request) {
     });
     const normalized = await normalizeProductImage(rawBuffer);
 
-    // Compute hashes and vision-fingerprint in parallel. The canonical dHash
-    // comes straight from the 9×8 grayscale buffer sharp has already produced
-    // for us, so the fingerprint work is basically free (~1 ms).
+    // Compute hashes, multi-rotation fingerprint and the product code
+    // allocation in parallel. The 4-rotation fingerprint makes the stored
+    // embedding robust to the angle the photo was taken from; the rotation
+    // hashes provide an O(1) exact-duplicate lookup on re-uploads.
     const canonicalHash = dHashFromGrayscale9x8(normalized.grayHash);
     const [rotationHashes, fingerprint, productCode] = await Promise.all([
       dHashAllRotations(normalized.buffer),
-      buildImageFingerprint(normalized.buffer),
+      buildMultiRotationFingerprint(normalized.buffer),
       ensureUniqueProductCode(Product, codePref),
     ]);
 

@@ -20,20 +20,38 @@ function openAiErrorMessage(status: number, json: unknown): string {
   return `HTTP ${status}`;
 }
 
+function validateEmbedding(embedding: unknown, idx: number): number[] {
+  if (!Array.isArray(embedding) || embedding.length === 0) {
+    throw new Error(`OpenAI embeddings response missing vector #${idx}`);
+  }
+  if (!embedding.every((x) => typeof x === 'number')) {
+    throw new Error(`OpenAI embedding vector #${idx} contained non-numeric values`);
+  }
+  if (embedding.length !== EMBEDDING_DIMENSION) {
+    throw new Error(
+      `Expected embedding length ${EMBEDDING_DIMENSION} (vector #${idx}), got ${embedding.length}`
+    );
+  }
+  return embedding as number[];
+}
+
 /**
- * Embed a free-form description into a 512-dim vector suitable for Atlas
- * Vector Search. Factored out so the vision + embedding calls can run
- * serially using the *same* description (no duplicate vision calls).
+ * Batched embeddings call. Uses a single OpenAI `/embeddings` request with an
+ * array input so we spend one network round-trip for up to N descriptions —
+ * this is the main latency optimisation for multi-rotation fingerprinting.
  */
-export async function embedDescription(description: string): Promise<number[]> {
+export async function embedDescriptionsBatch(
+  descriptions: string[]
+): Promise<number[][]> {
+  const inputs = descriptions.map((d) => (typeof d === 'string' ? d.trim() : ''));
+  if (inputs.some((d) => !d)) {
+    throw new Error('embedDescriptionsBatch: all descriptions must be non-empty');
+  }
+  if (!inputs.length) return [];
+
   const apiKey = getApiKey();
   const embeddingModel =
     process.env.OPENAI_EMBEDDING_MODEL?.trim() || 'text-embedding-3-small';
-
-  const input = description.trim();
-  if (!input) {
-    throw new Error('embedDescription called with empty input');
-  }
 
   const embRes = await fetch(`${OPENAI_BASE}/embeddings`, {
     method: 'POST',
@@ -43,7 +61,7 @@ export async function embedDescription(description: string): Promise<number[]> {
     },
     body: JSON.stringify({
       model: embeddingModel,
-      input,
+      input: inputs,
       dimensions: EMBEDDING_DIMENSION,
     }),
   });
@@ -56,22 +74,36 @@ export async function embedDescription(description: string): Promise<number[]> {
   }
 
   const data = (embJson as { data?: unknown })?.data;
-  const row = Array.isArray(data) ? data[0] : undefined;
-  const embedding = (row as { embedding?: unknown })?.embedding;
-
-  if (!Array.isArray(embedding) || embedding.length === 0) {
-    throw new Error('OpenAI embeddings response did not contain a vector');
-  }
-  if (!embedding.every((x) => typeof x === 'number')) {
-    throw new Error('OpenAI embedding vector contained non-numeric values');
-  }
-  if (embedding.length !== EMBEDDING_DIMENSION) {
+  if (!Array.isArray(data) || data.length !== inputs.length) {
     throw new Error(
-      `Expected embedding length ${EMBEDDING_DIMENSION}, got ${embedding.length}`
+      `OpenAI embeddings returned ${Array.isArray(data) ? data.length : 'no'} vectors; expected ${inputs.length}`
     );
   }
 
-  return embedding as number[];
+  // OpenAI guarantees response order matches input order but we sort defensively.
+  const sorted = [...data].sort((a, b) => {
+    const ai = typeof (a as { index?: unknown }).index === 'number'
+      ? (a as { index: number }).index
+      : 0;
+    const bi = typeof (b as { index?: unknown }).index === 'number'
+      ? (b as { index: number }).index
+      : 0;
+    return ai - bi;
+  });
+
+  return sorted.map((row, i) =>
+    validateEmbedding((row as { embedding?: unknown }).embedding, i)
+  );
+}
+
+/**
+ * Embed a single description. Thin wrapper over the batched call so every
+ * embedding path shares the same validation logic.
+ */
+export async function embedDescription(description: string): Promise<number[]> {
+  const [vec] = await embedDescriptionsBatch([description]);
+  if (!vec) throw new Error('embedDescription: no vector returned');
+  return vec;
 }
 
 /**

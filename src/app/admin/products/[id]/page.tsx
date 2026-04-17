@@ -213,12 +213,19 @@ function EditProductPageInner() {
     setGenLoading(true);
     setError('');
     try {
+      const isDataUrl = image.startsWith('data:');
+      const isHttpUrl = /^https?:\/\//i.test(image);
       const res = await fetch('/api/ai/generate-description', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim(),
-          imageBase64: imageDirty ? image : undefined,
+          // Always regenerate from the *current* image: send base64 when we
+          // have one locally, otherwise ask the server to fetch the saved
+          // http(s) URL. This also fixes the "description not working after
+          // edit" case where the old code sent `undefined` for the image.
+          imageBase64: image && isDataUrl ? image : undefined,
+          image_url: image && !isDataUrl && isHttpUrl ? image : undefined,
         }),
       });
       const data = await res.json();

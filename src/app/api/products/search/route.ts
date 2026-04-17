@@ -3,10 +3,13 @@ import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
 import { normalizeProductImage } from '@/lib/services/imageNormalize';
 import { dHashFromGrayscale9x8 } from '@/lib/services/imageHash';
-import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
+import { buildRotationQueryVectors } from '@/lib/services/multiRotationFingerprint';
 import { findNearestProductsByEmbedding } from '@/lib/services/vectorSearch';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
-import { selectStrictVectorMatches } from '@/lib/constants/searchScores';
+import {
+  getVectorMatchMinScore,
+  normalizeVectorMatchScore,
+} from '@/lib/constants/searchScores';
 import {
   FAST_VECTOR_LIMIT,
   FAST_VECTOR_NUM_CANDIDATES,
@@ -94,9 +97,8 @@ export async function POST(request: Request) {
     if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
       const normalized = await normalizeProductImage(imageBase64);
 
-      // Fast-path: if the query image has been indexed before (e.g. customer
-      // scanned the shelf tag and sees the exact photo we already stored) we
-      // can return the match immediately without a vision round-trip.
+      // Fast-path: if the query image has been indexed before (rotated or
+      // not) we can return immediately without any OpenAI round-trip.
       const canonicalHash = dHashFromGrayscale9x8(normalized.grayHash);
       const hashHit = await Product.findOne({ imageHashes: canonicalHash })
         .select(publicSelect)
@@ -109,41 +111,70 @@ export async function POST(request: Request) {
         });
       }
 
-      const embedding = await getImageEmbeddingFromJpegBuffer(normalized.buffer);
-      const hits = await findNearestProductsByEmbedding(
-        embedding,
-        FAST_VECTOR_LIMIT,
-        FAST_VECTOR_NUM_CANDIDATES
+      // Rotation-invariant query: generate embeddings for 0°/90°/180°/270°
+      // in one batched call, then run the $vectorSearch per rotation in
+      // parallel and keep the best hit per product id.
+      const fingerprint = await buildRotationQueryVectors(normalized.buffer);
+      const perRotationHits = await Promise.all(
+        fingerprint.rotationEmbeddings.map((vec) =>
+          findNearestProductsByEmbedding(
+            vec,
+            FAST_VECTOR_LIMIT,
+            FAST_VECTOR_NUM_CANDIDATES
+          )
+        )
       );
 
-      const { matches, meta } = selectStrictVectorMatches(hits);
-
-      if (matches.length === 0) {
-        return NextResponse.json({
-          products: [],
-          matchType: 'none',
-          threshold: meta.effectiveFloor,
-          vectorMeta: {
-            topScore: meta.topScore,
-            absoluteMin: meta.absoluteMin,
-            effectiveFloor: meta.effectiveFloor,
-            relativeMargin: meta.relativeMargin,
-          },
-        });
+      const bestPerProduct = new Map<
+        string,
+        {
+          _id: unknown;
+          name: string;
+          price: number;
+          image_url: string;
+          score: number;
+        }
+      >();
+      for (const hits of perRotationHits) {
+        for (const h of hits) {
+          const key = String(h._id);
+          const normScore = normalizeVectorMatchScore(h.score);
+          const current = bestPerProduct.get(key);
+          if (!current || normScore > current.score) {
+            bestPerProduct.set(key, {
+              _id: h._id,
+              name: h.name,
+              price: h.price,
+              image_url: h.image_url,
+              score: normScore,
+            });
+          }
+        }
       }
 
-      const products = await hydrateHitsWithDocs(matches);
+      const ranked = Array.from(bestPerProduct.values()).sort(
+        (a, b) => b.score - a.score
+      );
+
+      // Always return the closest 3 — even when nothing clears the soft
+      // threshold — so users with rotated / off-angle photos still see
+      // something meaningful. The `threshold` field lets the UI label
+      // "strong" vs "suggested" matches when it wants to.
+      const topN = ranked.slice(0, 3);
+      const threshold = getVectorMatchMinScore();
+      const products = await hydrateHitsWithDocs(topN);
+      const topScore = topN[0]?.score ?? 0;
 
       return NextResponse.json({
         products,
-        matchType: 'vector',
-        threshold: meta.effectiveFloor,
-        vectorMeta: {
-          topScore: meta.topScore,
-          absoluteMin: meta.absoluteMin,
-          effectiveFloor: meta.effectiveFloor,
-          relativeMargin: meta.relativeMargin,
-        },
+        matchType:
+          products.length === 0
+            ? 'none'
+            : topScore >= threshold
+              ? 'vector'
+              : 'suggested',
+        threshold,
+        vectorMeta: { topScore },
       });
     }
 
