@@ -38,3 +38,13 @@ export function compressImageDataUrl(
     img.src = dataUrl;
   });
 }
+
+/**
+ * Tight preset used by visual-match flows (product upload, similar-check,
+ * visual search). Matches the server-side canonicalisation: 384 px longest
+ * side at JPEG quality 0.55 — small enough to hit the <2 s upload target
+ * without noticeably hurting recognition accuracy.
+ */
+export function compressImageForVisualMatch(dataUrl: string): Promise<string> {
+  return compressImageDataUrl(dataUrl, 384, 0.55);
+}

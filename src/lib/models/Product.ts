@@ -4,6 +4,20 @@ import {
   PRODUCTS_COLLECTION,
 } from '@/lib/constants/vectorSearch';
 
+const AttributesSchema = new mongoose.Schema(
+  {
+    product_type: { type: String, default: '' },
+    brand: { type: String, default: '' },
+    primary_color: { type: String, default: '' },
+    secondary_color: { type: String, default: '' },
+    pattern: { type: String, default: '' },
+    shape: { type: String, default: '' },
+    logo_text: { type: String, default: '' },
+    unique_features: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 const ProductSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -20,6 +34,22 @@ const ProductSchema = new mongoose.Schema(
       trim: true,
     },
     image_url: { type: String, required: true },
+    /**
+     * Perceptual hashes (dHash) computed at 0°/90°/180°/270°. Indexed to give
+     * us an O(1) exact-duplicate lookup on re-uploads, including rotated
+     * variants of the same photo.
+     */
+    imageHashes: {
+      type: [String],
+      default: undefined,
+      index: true,
+    },
+    /**
+     * Strict visual attributes extracted at upload time. Used alongside the
+     * cosine similarity threshold to avoid treating colour/pattern variants
+     * as duplicates.
+     */
+    attributes: { type: AttributesSchema, default: () => ({}) },
     embedding: {
       type: [Number],
       required: true,

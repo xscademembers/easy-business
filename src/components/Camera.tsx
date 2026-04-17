@@ -7,7 +7,7 @@ import {
   Loader2,
   ImagePlus,
 } from 'lucide-react';
-import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { compressImageForVisualMatch } from '@/lib/client/compressImageDataUrl';
 import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 
@@ -121,7 +121,7 @@ export function Camera({
   const processDataUrl = async (raw: string) => {
     setCompressing(true);
     try {
-      const compressed = await compressImageDataUrl(raw);
+      const compressed = await compressImageForVisualMatch(raw);
       setCaptured(compressed);
       stopStream();
       onCapture(compressed);

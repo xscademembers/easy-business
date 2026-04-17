@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Upload, ChevronRight, ChevronLeft } from 'lucide-react';
-import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { compressImageForVisualMatch } from '@/lib/client/compressImageDataUrl';
 
 type Slide = { dataUrl: string; name: string };
 
@@ -49,7 +49,7 @@ export default function BulkUploadPage() {
         r.readAsDataURL(file);
       });
       try {
-        const compressed = await compressImageDataUrl(dataUrl);
+        const compressed = await compressImageForVisualMatch(dataUrl);
         next.push({ dataUrl: compressed, name: file.name.replace(/\.[^.]+$/, '') });
       } catch {
         /* skip */

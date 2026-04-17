@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
-import { compressImageForClip } from '@/lib/services/imageCompressionServer';
+import { normalizeProductImage } from '@/lib/services/imageNormalize';
+import { dHashFromGrayscale9x8 } from '@/lib/services/imageHash';
 import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
 import { findNearestProductsByEmbedding } from '@/lib/services/vectorSearch';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
 import { selectStrictVectorMatches } from '@/lib/constants/searchScores';
+import {
+  FAST_VECTOR_LIMIT,
+  FAST_VECTOR_NUM_CANDIDATES,
+} from '@/lib/constants/duplicateDetection';
 
 const publicSelect = PRODUCT_PUBLIC_FIELDS;
 
@@ -87,9 +92,29 @@ export async function POST(request: Request) {
     }
 
     if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
-      const { buffer } = await compressImageForClip(imageBase64);
-      const embedding = await getImageEmbeddingFromJpegBuffer(buffer);
-      const hits = await findNearestProductsByEmbedding(embedding, 24, 250);
+      const normalized = await normalizeProductImage(imageBase64);
+
+      // Fast-path: if the query image has been indexed before (e.g. customer
+      // scanned the shelf tag and sees the exact photo we already stored) we
+      // can return the match immediately without a vision round-trip.
+      const canonicalHash = dHashFromGrayscale9x8(normalized.grayHash);
+      const hashHit = await Product.findOne({ imageHashes: canonicalHash })
+        .select(publicSelect)
+        .lean();
+      if (hashHit) {
+        return NextResponse.json({
+          products: [{ ...hashHit, score: 1 }],
+          matchType: 'hash',
+          threshold: 1,
+        });
+      }
+
+      const embedding = await getImageEmbeddingFromJpegBuffer(normalized.buffer);
+      const hits = await findNearestProductsByEmbedding(
+        embedding,
+        FAST_VECTOR_LIMIT,
+        FAST_VECTOR_NUM_CANDIDATES
+      );
 
       const { matches, meta } = selectStrictVectorMatches(hits);
 

@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
-import { compressImageForClip } from '@/lib/services/imageCompressionServer';
-import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
+import { normalizeProductImage } from '@/lib/services/imageNormalize';
+import {
+  dHashAllRotations,
+  dHashFromGrayscale9x8,
+} from '@/lib/services/imageHash';
+import {
+  buildImageFingerprint,
+} from '@/lib/services/openaiImageEmbedding';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
 import {
   ensureUniqueProductCode,
@@ -11,15 +17,17 @@ import {
 
 const publicSelect = PRODUCT_PUBLIC_FIELDS;
 
-async function resolveImageAndBuffer(body: {
+async function resolveRawImageBuffer(body: {
   imageBase64?: string;
   image_url?: string;
-}): Promise<{ image_url: string; jpegBuffer: Buffer }> {
+}): Promise<{ displayUrl: string | null; rawBuffer: Buffer }> {
   const { imageBase64, image_url } = body;
 
   if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
-    const { buffer, dataUrl } = await compressImageForClip(imageBase64);
-    return { image_url: dataUrl, jpegBuffer: buffer };
+    const base64 = imageBase64.includes(',')
+      ? imageBase64.split(',')[1]!
+      : imageBase64;
+    return { displayUrl: null, rawBuffer: Buffer.from(base64, 'base64') };
   }
 
   if (typeof image_url === 'string' && /^https?:\/\//i.test(image_url.trim())) {
@@ -28,9 +36,10 @@ async function resolveImageAndBuffer(body: {
     if (!res.ok) {
       throw new Error(`Could not fetch image_url (${res.status})`);
     }
-    const raw = Buffer.from(await res.arrayBuffer());
-    const { buffer, dataUrl } = await compressImageForClip(raw);
-    return { image_url: url, jpegBuffer: buffer };
+    return {
+      displayUrl: url,
+      rawBuffer: Buffer.from(await res.arrayBuffer()),
+    };
   }
 
   throw new Error('Provide imageBase64 or a http(s) image_url');
@@ -132,8 +141,7 @@ export async function POST(request: Request) {
       typeof quantity === 'number' && !Number.isNaN(quantity)
         ? Math.max(0, Math.floor(quantity))
         : 0;
-    const desc =
-      typeof description === 'string' ? description.trim() : '';
+    const desc = typeof description === 'string' ? description.trim() : '';
     const normalizedSizes = normalizeSizes(cat, sizes);
 
     const codePref =
@@ -147,13 +155,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const { image_url: resolvedUrl, jpegBuffer } = await resolveImageAndBuffer({
+    const { displayUrl, rawBuffer } = await resolveRawImageBuffer({
       imageBase64,
       image_url,
     });
+    const normalized = await normalizeProductImage(rawBuffer);
 
-    const embedding = await getImageEmbeddingFromJpegBuffer(jpegBuffer);
-    const productCode = await ensureUniqueProductCode(Product, codePref);
+    // Compute hashes and vision-fingerprint in parallel. The canonical dHash
+    // comes straight from the 9×8 grayscale buffer sharp has already produced
+    // for us, so the fingerprint work is basically free (~1 ms).
+    const canonicalHash = dHashFromGrayscale9x8(normalized.grayHash);
+    const [rotationHashes, fingerprint, productCode] = await Promise.all([
+      dHashAllRotations(normalized.buffer),
+      buildImageFingerprint(normalized.buffer),
+      ensureUniqueProductCode(Product, codePref),
+    ]);
+
+    const hashes = Array.from(new Set([canonicalHash, ...rotationHashes]));
+    const storedImageUrl = displayUrl ?? normalized.dataUrl;
 
     const product = await Product.create({
       name: name.trim(),
@@ -163,8 +182,10 @@ export async function POST(request: Request) {
       category: cat,
       sizes: normalizedSizes,
       productCode,
-      image_url: resolvedUrl,
-      embedding,
+      image_url: storedImageUrl,
+      imageHashes: hashes,
+      attributes: fingerprint.attributes,
+      embedding: fingerprint.embedding,
     });
 
     const lean = await Product.findById(product._id).select(publicSelect).lean();

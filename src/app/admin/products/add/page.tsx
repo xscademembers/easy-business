@@ -12,7 +12,7 @@ import {
   Wand2,
   SpellCheck,
 } from 'lucide-react';
-import { compressImageDataUrl } from '@/lib/client/compressImageDataUrl';
+import { compressImageForVisualMatch } from '@/lib/client/compressImageDataUrl';
 import { resetCameraZoomTo1x } from '@/lib/client/resetCameraZoomTo1x';
 import { getPortraitCameraMediaStream } from '@/lib/client/portraitCameraConstraints';
 import { VoiceTextButton } from '@/components/VoiceTextButton';
@@ -105,7 +105,7 @@ export default function AddProductPage() {
     ctx.drawImage(video, 0, 0);
     const raw = canvas.toDataURL('image/jpeg', 0.85);
     try {
-      const compressed = await compressImageDataUrl(raw);
+      const compressed = await compressImageForVisualMatch(raw);
       setImage(compressed);
     } catch {
       setError('Could not compress image');
@@ -124,7 +124,7 @@ export default function AddProductPage() {
       const res = reader.result;
       if (typeof res !== 'string') return;
       try {
-        const compressed = await compressImageDataUrl(res);
+        const compressed = await compressImageForVisualMatch(res);
         setImage(compressed);
         stopCamera();
         setError('');

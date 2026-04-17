@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Product from '@/lib/models/Product';
-import { compressImageForClip } from '@/lib/services/imageCompressionServer';
-import { getImageEmbeddingFromJpegBuffer } from '@/lib/services/openaiImageEmbedding';
+import { normalizeProductImage } from '@/lib/services/imageNormalize';
+import {
+  dHashAllRotations,
+  dHashFromGrayscale9x8,
+} from '@/lib/services/imageHash';
+import { buildImageFingerprint } from '@/lib/services/openaiImageEmbedding';
 import { PRODUCT_PUBLIC_FIELDS } from '@/lib/constants/productFields';
 import {
   ensureUniqueProductCode,
@@ -177,10 +181,13 @@ export async function PUT(
       }
     }
 
+    let normalizedImage: Awaited<ReturnType<typeof normalizeProductImage>> | null =
+      null;
+    let newDisplayUrl: string | null = null;
+
     if (typeof imageBase64 === 'string' && imageBase64.length > 0) {
-      const { buffer, dataUrl } = await compressImageForClip(imageBase64);
-      update.image_url = dataUrl;
-      update.embedding = await getImageEmbeddingFromJpegBuffer(buffer);
+      normalizedImage = await normalizeProductImage(imageBase64);
+      newDisplayUrl = normalizedImage.dataUrl;
     } else if (
       typeof image_url === 'string' &&
       /^https?:\/\//i.test(image_url.trim())
@@ -194,9 +201,24 @@ export async function PUT(
         );
       }
       const rawBuf = Buffer.from(await res.arrayBuffer());
-      const { buffer } = await compressImageForClip(rawBuf);
-      update.image_url = url;
-      update.embedding = await getImageEmbeddingFromJpegBuffer(buffer);
+      normalizedImage = await normalizeProductImage(rawBuf);
+      newDisplayUrl = url;
+    }
+
+    if (normalizedImage) {
+      // Recompute fingerprint + rotation hashes + attributes together so the
+      // stored record remains internally consistent on image replacement.
+      const canonicalHash = dHashFromGrayscale9x8(normalizedImage.grayHash);
+      const [rotationHashes, fingerprint] = await Promise.all([
+        dHashAllRotations(normalizedImage.buffer),
+        buildImageFingerprint(normalizedImage.buffer),
+      ]);
+      update.imageHashes = Array.from(
+        new Set([canonicalHash, ...rotationHashes])
+      );
+      update.attributes = fingerprint.attributes;
+      update.embedding = fingerprint.embedding;
+      update.image_url = newDisplayUrl;
     }
 
     if (Object.keys(update).length === 0) {
